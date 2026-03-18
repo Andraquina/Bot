@@ -7,7 +7,9 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  Events
+  Events,
+  PermissionsBitField,
+  ChannelType
 } = require('discord.js');
 
 const client = new Client({
@@ -48,7 +50,7 @@ client.on(Events.InteractionCreate, async interaction => {
   try {
 
     // =========================
-    // 🔘 BUTTON → OPEN FORM
+    // 🔘 OPEN FORM
     // =========================
     if (interaction.isButton() && interaction.customId === 'open_form') {
 
@@ -128,7 +130,7 @@ client.on(Events.InteractionCreate, async interaction => {
           );
         }
 
-        // 🔘 ADMIN APPROVAL BUTTONS
+        // 🔘 ADMIN BUTTONS
         const approveBtn = new ButtonBuilder()
           .setCustomId(`approve_${member.id}_${company}`)
           .setLabel('Approve')
@@ -160,7 +162,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // ✅ APPROVE / REJECT SYSTEM
+    // ✅ APPROVE / REJECT
     // =========================
     if (interaction.isButton()) {
 
@@ -170,7 +172,7 @@ client.on(Events.InteractionCreate, async interaction => {
       if (action === "approve") {
 
         const userId = parts[1];
-        const company = parts.slice(2).join('_'); // handles spaces
+        const company = parts.slice(2).join('_');
 
         const member = await interaction.guild.members.fetch(userId);
 
@@ -187,6 +189,7 @@ client.on(Events.InteractionCreate, async interaction => {
           });
         }
 
+        // remove pending
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
         if (pendingRole) {
           await member.roles.remove(pendingRole);
@@ -194,9 +197,59 @@ client.on(Events.InteractionCreate, async interaction => {
 
         await member.roles.add(role);
 
-        // 📩 DM USER
+        // =========================
+        // 🚀 CREATE CHANNELS (SAFE)
+        // =========================
+
+        let category = interaction.guild.channels.cache.find(
+          c => c.name === company && c.type === ChannelType.GuildCategory
+        );
+
+        if (!category) {
+          category = await interaction.guild.channels.create({
+            name: company,
+            type: ChannelType.GuildCategory,
+            permissionOverwrites: [
+              {
+                id: interaction.guild.id,
+                deny: [PermissionsBitField.Flags.ViewChannel],
+              },
+              {
+                id: role.id,
+                allow: [PermissionsBitField.Flags.ViewChannel],
+              }
+            ]
+          });
+        }
+
+        // create channels only if they don't exist
+        const existingGeneral = interaction.guild.channels.cache.find(
+          c => c.name === 'general' && c.parentId === category.id
+        );
+
+        if (!existingGeneral) {
+          await interaction.guild.channels.create({
+            name: 'general',
+            type: ChannelType.GuildText,
+            parent: category.id
+          });
+        }
+
+        const existingFiles = interaction.guild.channels.cache.find(
+          c => c.name === 'files' && c.parentId === category.id
+        );
+
+        if (!existingFiles) {
+          await interaction.guild.channels.create({
+            name: 'files',
+            type: ChannelType.GuildText,
+            parent: category.id
+          });
+        }
+
+        // 📩 DM user
         try {
-          await member.send(`✅ You’ve been approved! Welcome to ${company} 🎉`);
+          await member.send(`✅ You’ve been approved! Your company space is ready 🎉`);
         } catch {}
 
         await interaction.reply({
