@@ -25,6 +25,34 @@ client.once(Events.ClientReady, () => {
 });
 
 
+// =========================
+// 🧠 SMART COMPANY MATCHING
+// =========================
+
+function normalize(str) {
+  return str
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function extractKeywords(str) {
+  return str.toLowerCase().split(/\s+/);
+}
+
+function isSameCompany(a, b) {
+  const na = normalize(a);
+  const nb = normalize(b);
+
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+
+  const wordsA = extractKeywords(a);
+  const wordsB = extractKeywords(b);
+
+  return wordsA.some(w => wordsB.includes(w));
+}
+
+
 // 🔘 SETUP COMMAND
 client.on(Events.MessageCreate, async message => {
   if (message.author.bot) return;
@@ -45,7 +73,9 @@ client.on(Events.MessageCreate, async message => {
 });
 
 
+// =========================
 // 📋 INTERACTIONS
+// =========================
 client.on(Events.InteractionCreate, async interaction => {
   try {
 
@@ -75,7 +105,9 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
+    // =========================
     // 📋 FORM SUBMIT
+    // =========================
     if (interaction.isModalSubmit() && interaction.customId === 'user_form') {
 
       await interaction.deferReply({ ephemeral: true });
@@ -84,23 +116,19 @@ client.on(Events.InteractionCreate, async interaction => {
       const company = interaction.fields.getTextInputValue('company');
       const member = interaction.member;
 
-      const clean = str => str.toLowerCase().replace(/\s+/g, '');
-      const input = clean(company);
-
       let role = interaction.guild.roles.cache.find(r =>
-        clean(r.name) === input
+        isSameCompany(r.name, company)
       );
 
-      const category = interaction.guild.channels.cache.find(
-        c => clean(c.name) === input &&
-        c.type === ChannelType.GuildCategory
+      let category = interaction.guild.channels.cache.find(c =>
+        c.type === ChannelType.GuildCategory &&
+        isSameCompany(c.name, company)
       );
 
       try {
         await member.setNickname(`${name} | ${company}`);
       } catch {}
 
-      // ✅ EXISTING COMPANY
       if (role && category) {
 
         await member.roles.add(role);
@@ -114,19 +142,19 @@ client.on(Events.InteractionCreate, async interaction => {
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
         if (pendingRole) await member.roles.add(pendingRole);
 
-        interaction.channel.send(
+        const welcomeMsg = await interaction.channel.send(
           `👋 Welcome <@${member.id}>\n\n` +
           `It seems you're new to us.\n` +
           `We’re setting everything up for you now.`
         );
 
         const approveBtn = new ButtonBuilder()
-          .setCustomId(`approve_${member.id}_${company}`)
+          .setCustomId(`approve_${member.id}_${company}_${welcomeMsg.id}`)
           .setLabel('Approve')
           .setStyle(ButtonStyle.Success);
 
         const rejectBtn = new ButtonBuilder()
-          .setCustomId(`reject_${member.id}`)
+          .setCustomId(`reject_${member.id}_${welcomeMsg.id}`)
           .setLabel('Reject')
           .setStyle(ButtonStyle.Danger);
 
@@ -150,29 +178,27 @@ client.on(Events.InteractionCreate, async interaction => {
       }
     }
 
+    // =========================
     // ✅ APPROVE / REJECT
+    // =========================
     if (interaction.isButton()) {
 
       const parts = interaction.customId.split('_');
       const action = parts[0];
 
-      // =========================
       // ✅ APPROVE
-      // =========================
       if (action === "approve") {
 
         await interaction.deferReply({ ephemeral: true });
 
         const userId = parts[1];
-        const company = parts.slice(2).join('_');
+        const company = parts[2];
+        const welcomeMsgId = parts[3];
 
         const member = await interaction.guild.members.fetch(userId);
 
-        const clean = str => str.toLowerCase().replace(/\s+/g, '');
-        const input = clean(company);
-
         let role = interaction.guild.roles.cache.find(r =>
-          clean(r.name) === input
+          isSameCompany(r.name, company)
         );
 
         if (!role) {
@@ -203,14 +229,16 @@ client.on(Events.InteractionCreate, async interaction => {
               PermissionsBitField.Flags.UseExternalStickers,
               PermissionsBitField.Flags.ManageMessages,
               PermissionsBitField.Flags.ReadMessageHistory,
-              PermissionsBitField.Flags.SendTTSMessages
+              PermissionsBitField.Flags.SendTTSMessages,
+              PermissionsBitField.Flags.Connect,
+              PermissionsBitField.Flags.Speak
             ]
           }
         ];
 
-        let category = interaction.guild.channels.cache.find(
-          c => clean(c.name) === input &&
-          c.type === ChannelType.GuildCategory
+        let category = interaction.guild.channels.cache.find(c =>
+          c.type === ChannelType.GuildCategory &&
+          isSameCompany(c.name, company)
         );
 
         if (!category) {
@@ -229,12 +257,23 @@ client.on(Events.InteractionCreate, async interaction => {
           await interaction.guild.channels.create({
             name: 'Voice Call',
             type: ChannelType.GuildVoice,
-            parent: category.id
+            parent: category.id,
+            permissionOverwrites: permissionOverwrites
           });
         }
 
+        // 🧹 DELETE WELCOME MESSAGE
         try {
-          await member.send(`✅ You’ve been approved! You now have access to ${company} 🎉`);
+          const channel = interaction.channel;
+          const msg = await channel.messages.fetch(welcomeMsgId);
+          await msg.delete();
+        } catch {}
+
+        // 🧹 DELETE ADMIN MESSAGE
+        await interaction.message.delete().catch(() => {});
+
+        try {
+          await member.send(`✅ You’ve been approved! Welcome to ${company} 🎉`);
         } catch {}
 
         await interaction.editReply({
@@ -242,18 +281,27 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
-      // =========================
       // ❌ REJECT
-      // =========================
       if (action === "reject") {
 
         await interaction.deferReply({ ephemeral: true });
 
         const userId = parts[1];
+        const welcomeMsgId = parts[2];
+
         const member = await interaction.guild.members.fetch(userId);
 
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
         if (pendingRole) await member.roles.remove(pendingRole);
+
+        // delete welcome message
+        try {
+          const channel = interaction.channel;
+          const msg = await channel.messages.fetch(welcomeMsgId);
+          await msg.delete();
+        } catch {}
+
+        await interaction.message.delete().catch(() => {});
 
         await interaction.editReply({
           content: `❌ Rejected ${member.user.username}`
