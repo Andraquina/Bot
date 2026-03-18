@@ -9,7 +9,8 @@ const {
   TextInputStyle,
   Events,
   PermissionsBitField,
-  ChannelType
+  ChannelType,
+  InteractionResponseFlags
 } = require('discord.js');
 
 const client = new Client({
@@ -78,7 +79,9 @@ client.on(Events.InteractionCreate, async interaction => {
     // 📋 FORM SUBMIT
     if (interaction.isModalSubmit() && interaction.customId === 'user_form') {
 
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({
+        flags: InteractionResponseFlags.Ephemeral
+      });
 
       const name = interaction.fields.getTextInputValue('name');
       const company = interaction.fields.getTextInputValue('company');
@@ -100,7 +103,7 @@ client.on(Events.InteractionCreate, async interaction => {
         await member.setNickname(`${name} | ${company}`);
       } catch {}
 
-      // ✅ EXISTING COMPANY (ROLE + CATEGORY)
+      // ✅ EXISTING COMPANY
       if (role && category) {
 
         await member.roles.add(role);
@@ -110,8 +113,6 @@ client.on(Events.InteractionCreate, async interaction => {
         });
 
       } else {
-
-        // ❗ NEW / INCOMPLETE COMPANY FLOW
 
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
         if (pendingRole) await member.roles.add(pendingRole);
@@ -183,7 +184,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
         await member.roles.add(role);
 
-        // 🔐 PERMISSIONS
         const permissionOverwrites = [
           {
             id: interaction.guild.id,
@@ -242,7 +242,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         await interaction.reply({
           content: `✅ Approved ${member.user.username}`,
-          ephemeral: true
+          flags: InteractionResponseFlags.Ephemeral
         });
       }
 
@@ -256,7 +256,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         await interaction.reply({
           content: `❌ Rejected ${member.user.username}`,
-          ephemeral: true
+          flags: InteractionResponseFlags.Ephemeral
         });
       }
     }
