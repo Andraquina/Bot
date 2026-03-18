@@ -132,4 +132,4 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 });
 
-client.login('MTQ4MzU5NjI4NzcxNzkzMzA1Ng.GpvP3u.zg38FTFs0B35Y3wkz8BJnr6qdALoZhlz1RACFk');
+client.login(process.env.TOKEN);
