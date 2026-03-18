@@ -9,8 +9,7 @@ const {
   TextInputStyle,
   Events,
   PermissionsBitField,
-  ChannelType,
-  InteractionResponseFlags
+  ChannelType
 } = require('discord.js');
 
 const client = new Client({
@@ -79,9 +78,7 @@ client.on(Events.InteractionCreate, async interaction => {
     // 📋 FORM SUBMIT
     if (interaction.isModalSubmit() && interaction.customId === 'user_form') {
 
-      await interaction.deferReply({
-        flags: InteractionResponseFlags.Ephemeral
-      });
+      await interaction.deferReply({ ephemeral: true });
 
       const name = interaction.fields.getTextInputValue('name');
       const company = interaction.fields.getTextInputValue('company');
@@ -103,6 +100,7 @@ client.on(Events.InteractionCreate, async interaction => {
         await member.setNickname(`${name} | ${company}`);
       } catch {}
 
+      // ✅ EXISTING COMPANY
       if (role && category) {
 
         await member.roles.add(role);
@@ -163,9 +161,7 @@ client.on(Events.InteractionCreate, async interaction => {
       // =========================
       if (action === "approve") {
 
-        await interaction.deferReply({
-          flags: InteractionResponseFlags.Ephemeral
-        });
+        await interaction.deferReply({ ephemeral: true });
 
         const userId = parts[1];
         const company = parts.slice(2).join('_');
@@ -253,9 +249,7 @@ client.on(Events.InteractionCreate, async interaction => {
       // =========================
       if (action === "reject") {
 
-        await interaction.deferReply({
-          flags: InteractionResponseFlags.Ephemeral
-        });
+        await interaction.deferReply({ ephemeral: true });
 
         const userId = parts[1];
         const member = await interaction.guild.members.fetch(userId);
