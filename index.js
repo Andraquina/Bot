@@ -203,9 +203,7 @@ client.on(Events.InteractionCreate, async interaction => {
               PermissionsBitField.Flags.UseExternalStickers,
               PermissionsBitField.Flags.ManageMessages,
               PermissionsBitField.Flags.ReadMessageHistory,
-              PermissionsBitField.Flags.SendTTSMessages,
-              PermissionsBitField.Flags.SendVoiceMessages,
-              PermissionsBitField.Flags.CreatePolls
+              PermissionsBitField.Flags.SendTTSMessages
             ]
           }
         ];
