@@ -30,9 +30,7 @@ client.once(Events.ClientReady, () => {
 // =========================
 
 function normalize(str) {
-  return str
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
+  return str.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 function extractKeywords(str) {
@@ -254,18 +252,22 @@ client.on(Events.InteractionCreate, async interaction => {
             parent: category.id
           });
 
-          await interaction.guild.channels.create({
-            name: 'Voice Call',
-            type: ChannelType.GuildVoice,
-            parent: category.id,
-            permissionOverwrites: permissionOverwrites
-          });
+          // 🔊 SAFE VOICE CREATION
+          try {
+            await interaction.guild.channels.create({
+              name: 'Voice Call',
+              type: ChannelType.GuildVoice,
+              parent: category.id,
+              permissionOverwrites: permissionOverwrites
+            });
+          } catch (err) {
+            console.error("Voice channel error:", err);
+          }
         }
 
         // 🧹 DELETE WELCOME MESSAGE
         try {
-          const channel = interaction.channel;
-          const msg = await channel.messages.fetch(welcomeMsgId);
+          const msg = await interaction.channel.messages.fetch(welcomeMsgId);
           await msg.delete();
         } catch {}
 
@@ -294,10 +296,8 @@ client.on(Events.InteractionCreate, async interaction => {
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
         if (pendingRole) await member.roles.remove(pendingRole);
 
-        // delete welcome message
         try {
-          const channel = interaction.channel;
-          const msg = await channel.messages.fetch(welcomeMsgId);
+          const msg = await interaction.channel.messages.fetch(welcomeMsgId);
           await msg.delete();
         } catch {}
 
