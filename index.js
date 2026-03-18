@@ -108,14 +108,14 @@ client.on(Events.InteractionCreate, async interaction => {
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
         if (pendingRole) await member.roles.add(pendingRole);
 
-        // ✅ SAME CHANNEL MESSAGE
+        // SAME CHANNEL MESSAGE
         interaction.channel.send(
           `👋 Welcome <@${member.id}>\n\n` +
           `It seems you're new to us.\n` +
           `We’re setting everything up for you now.`
         );
 
-        // 🔘 ADMIN BUTTONS
+        // ADMIN BUTTONS
         const approveBtn = new ButtonBuilder()
           .setCustomId(`approve_${member.id}_${company}`)
           .setLabel('Approve')
@@ -161,14 +161,13 @@ client.on(Events.InteractionCreate, async interaction => {
 
         const clean = str => str.toLowerCase().replace(/\s+/g, '');
 
+        // 🔍 ROLE (reuse or create)
         let role = interaction.guild.roles.cache.find(r =>
           clean(r.name) === clean(company)
         );
 
         if (!role) {
-          role = await interaction.guild.roles.create({
-            name: company
-          });
+          role = await interaction.guild.roles.create({ name: company });
         }
 
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
@@ -176,63 +175,54 @@ client.on(Events.InteractionCreate, async interaction => {
 
         await member.roles.add(role);
 
-        // =========================
-        // 🚀 CUSTOM PERMISSIONS
-        // =========================
-
-        const allowedPermissions = [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages,
-          PermissionsBitField.Flags.SendMessagesInThreads,
-          PermissionsBitField.Flags.CreatePublicThreads,
-          PermissionsBitField.Flags.EmbedLinks,
-          PermissionsBitField.Flags.AttachFiles,
-          PermissionsBitField.Flags.AddReactions,
-          PermissionsBitField.Flags.UseExternalEmojis,
-          PermissionsBitField.Flags.UseExternalStickers,
-          PermissionsBitField.Flags.ManageMessages,
-          PermissionsBitField.Flags.ReadMessageHistory,
-          PermissionsBitField.Flags.SendTTSMessages,
-          PermissionsBitField.Flags.SendVoiceMessages,
-          PermissionsBitField.Flags.CreatePolls
+        // 🔐 FIXED PERMISSIONS
+        const permissionOverwrites = [
+          {
+            id: interaction.guild.id,
+            deny: [PermissionsBitField.Flags.ViewChannel],
+          },
+          {
+            id: role.id,
+            allow: [
+              PermissionsBitField.Flags.ViewChannel,
+              PermissionsBitField.Flags.SendMessages,
+              PermissionsBitField.Flags.SendMessagesInThreads,
+              PermissionsBitField.Flags.CreatePublicThreads,
+              PermissionsBitField.Flags.EmbedLinks,
+              PermissionsBitField.Flags.AttachFiles,
+              PermissionsBitField.Flags.AddReactions,
+              PermissionsBitField.Flags.UseExternalEmojis,
+              PermissionsBitField.Flags.UseExternalStickers,
+              PermissionsBitField.Flags.ManageMessages,
+              PermissionsBitField.Flags.ReadMessageHistory,
+              PermissionsBitField.Flags.SendTTSMessages,
+              PermissionsBitField.Flags.SendVoiceMessages,
+              PermissionsBitField.Flags.CreatePolls
+            ]
+          }
         ];
 
-        const deniedPermissions = Object.values(PermissionsBitField.Flags)
-          .filter(p => !allowedPermissions.includes(p));
-
+        // 🔍 CATEGORY (reuse or create)
         let category = interaction.guild.channels.cache.find(
-          c => c.name === company && c.type === ChannelType.GuildCategory
+          c => clean(c.name) === clean(company) &&
+          c.type === ChannelType.GuildCategory
         );
 
         if (!category) {
           category = await interaction.guild.channels.create({
             name: company,
             type: ChannelType.GuildCategory,
-            permissionOverwrites: [
-              {
-                id: interaction.guild.id,
-                deny: [PermissionsBitField.Flags.ViewChannel],
-              },
-              {
-                id: role.id,
-                allow: allowedPermissions,
-                deny: deniedPermissions
-              }
-            ]
+            permissionOverwrites: permissionOverwrites
           });
-        }
 
-        // 📄 GENERAL
-        if (!interaction.guild.channels.cache.find(c => c.name === 'general' && c.parentId === category.id)) {
+          // 📄 GENERAL
           await interaction.guild.channels.create({
             name: 'general',
             type: ChannelType.GuildText,
             parent: category.id
           });
-        }
 
-        // 🔊 VOICE CALL
-        if (!interaction.guild.channels.cache.find(c => c.name === 'Voice Call' && c.parentId === category.id)) {
+          // 🔊 VOICE
           await interaction.guild.channels.create({
             name: 'Voice Call',
             type: ChannelType.GuildVoice,
@@ -240,9 +230,9 @@ client.on(Events.InteractionCreate, async interaction => {
           });
         }
 
-        // 📩 DM
+        // DM
         try {
-          await member.send(`✅ You’ve been approved! Your company space is ready 🎉`);
+          await member.send(`✅ You’ve been approved! You now have access to ${company} 🎉`);
         } catch {}
 
         await interaction.reply({
@@ -270,6 +260,5 @@ client.on(Events.InteractionCreate, async interaction => {
     console.error("ERROR:", error);
   }
 });
-
 
 client.login(process.env.TOKEN);
