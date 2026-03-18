@@ -103,7 +103,6 @@ client.on(Events.InteractionCreate, async interaction => {
         await member.setNickname(`${name} | ${company}`);
       } catch {}
 
-      // ✅ EXISTING COMPANY
       if (role && category) {
 
         await member.roles.add(role);
@@ -117,14 +116,12 @@ client.on(Events.InteractionCreate, async interaction => {
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
         if (pendingRole) await member.roles.add(pendingRole);
 
-        // SAME CHANNEL MESSAGE
         interaction.channel.send(
           `👋 Welcome <@${member.id}>\n\n` +
           `It seems you're new to us.\n` +
           `We’re setting everything up for you now.`
         );
 
-        // ADMIN BUTTONS
         const approveBtn = new ButtonBuilder()
           .setCustomId(`approve_${member.id}_${company}`)
           .setLabel('Approve')
@@ -161,7 +158,14 @@ client.on(Events.InteractionCreate, async interaction => {
       const parts = interaction.customId.split('_');
       const action = parts[0];
 
+      // =========================
+      // ✅ APPROVE
+      // =========================
       if (action === "approve") {
+
+        await interaction.deferReply({
+          flags: InteractionResponseFlags.Ephemeral
+        });
 
         const userId = parts[1];
         const company = parts.slice(2).join('_');
@@ -216,7 +220,6 @@ client.on(Events.InteractionCreate, async interaction => {
         );
 
         if (!category) {
-
           category = await interaction.guild.channels.create({
             name: company,
             type: ChannelType.GuildCategory,
@@ -240,13 +243,19 @@ client.on(Events.InteractionCreate, async interaction => {
           await member.send(`✅ You’ve been approved! You now have access to ${company} 🎉`);
         } catch {}
 
-        await interaction.reply({
-          content: `✅ Approved ${member.user.username}`,
-          flags: InteractionResponseFlags.Ephemeral
+        await interaction.editReply({
+          content: `✅ Approved ${member.user.username}`
         });
       }
 
+      // =========================
+      // ❌ REJECT
+      // =========================
       if (action === "reject") {
+
+        await interaction.deferReply({
+          flags: InteractionResponseFlags.Ephemeral
+        });
 
         const userId = parts[1];
         const member = await interaction.guild.members.fetch(userId);
@@ -254,9 +263,8 @@ client.on(Events.InteractionCreate, async interaction => {
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
         if (pendingRole) await member.roles.remove(pendingRole);
 
-        await interaction.reply({
-          content: `❌ Rejected ${member.user.username}`,
-          flags: InteractionResponseFlags.Ephemeral
+        await interaction.editReply({
+          content: `❌ Rejected ${member.user.username}`
         });
       }
     }
