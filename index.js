@@ -25,7 +25,7 @@ client.once(Events.ClientReady, () => {
 });
 
 
-// 🔘 SETUP COMMAND (run once)
+// 🔘 SETUP COMMAND
 client.on(Events.MessageCreate, async message => {
   if (message.author.bot) return;
 
@@ -49,9 +49,7 @@ client.on(Events.MessageCreate, async message => {
 client.on(Events.InteractionCreate, async interaction => {
   try {
 
-    // =========================
     // 🔘 OPEN FORM
-    // =========================
     if (interaction.isButton() && interaction.customId === 'open_form') {
 
       const modal = new ModalBuilder()
@@ -77,9 +75,7 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
-    // =========================
     // 📋 FORM SUBMIT
-    // =========================
     if (interaction.isModalSubmit() && interaction.customId === 'user_form') {
 
       await interaction.deferReply({ ephemeral: true });
@@ -96,13 +92,11 @@ client.on(Events.InteractionCreate, async interaction => {
         return input.includes(roleName) || roleName.includes(input);
       });
 
-      // nickname
       try {
         await member.setNickname(`${name} | ${company}`);
       } catch {}
 
       if (role) {
-        // ✅ KNOWN COMPANY
         await member.roles.add(role);
 
         await interaction.editReply({
@@ -110,14 +104,11 @@ client.on(Events.InteractionCreate, async interaction => {
         });
 
       } else {
-        // ❗ NEW COMPANY FLOW
 
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
-        if (pendingRole) {
-          await member.roles.add(pendingRole);
-        }
+        if (pendingRole) await member.roles.add(pendingRole);
 
-        // ✅ SAME CHANNEL MESSAGE (UPDATED)
+        // ✅ SAME CHANNEL MESSAGE
         interaction.channel.send(
           `👋 Welcome <@${member.id}>\n\n` +
           `It seems you're new to us.\n` +
@@ -155,9 +146,7 @@ client.on(Events.InteractionCreate, async interaction => {
       }
     }
 
-    // =========================
     // ✅ APPROVE / REJECT
-    // =========================
     if (interaction.isButton()) {
 
       const parts = interaction.customId.split('_');
@@ -178,19 +167,39 @@ client.on(Events.InteractionCreate, async interaction => {
 
         if (!role) {
           role = await interaction.guild.roles.create({
-            name: company,
-            reason: "Approved new company"
+            name: company
           });
         }
 
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
-        if (pendingRole) {
-          await member.roles.remove(pendingRole);
-        }
+        if (pendingRole) await member.roles.remove(pendingRole);
 
         await member.roles.add(role);
 
-        // 🚀 CREATE CHANNELS
+        // =========================
+        // 🚀 CUSTOM PERMISSIONS
+        // =========================
+
+        const allowedPermissions = [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages,
+          PermissionsBitField.Flags.SendMessagesInThreads,
+          PermissionsBitField.Flags.CreatePublicThreads,
+          PermissionsBitField.Flags.EmbedLinks,
+          PermissionsBitField.Flags.AttachFiles,
+          PermissionsBitField.Flags.AddReactions,
+          PermissionsBitField.Flags.UseExternalEmojis,
+          PermissionsBitField.Flags.UseExternalStickers,
+          PermissionsBitField.Flags.ManageMessages,
+          PermissionsBitField.Flags.ReadMessageHistory,
+          PermissionsBitField.Flags.SendTTSMessages,
+          PermissionsBitField.Flags.SendVoiceMessages,
+          PermissionsBitField.Flags.CreatePolls
+        ];
+
+        const deniedPermissions = Object.values(PermissionsBitField.Flags)
+          .filter(p => !allowedPermissions.includes(p));
+
         let category = interaction.guild.channels.cache.find(
           c => c.name === company && c.type === ChannelType.GuildCategory
         );
@@ -206,17 +215,15 @@ client.on(Events.InteractionCreate, async interaction => {
               },
               {
                 id: role.id,
-                allow: [PermissionsBitField.Flags.ViewChannel],
+                allow: allowedPermissions,
+                deny: deniedPermissions
               }
             ]
           });
         }
 
-        const existingGeneral = interaction.guild.channels.cache.find(
-          c => c.name === 'general' && c.parentId === category.id
-        );
-
-        if (!existingGeneral) {
+        // 📄 GENERAL
+        if (!interaction.guild.channels.cache.find(c => c.name === 'general' && c.parentId === category.id)) {
           await interaction.guild.channels.create({
             name: 'general',
             type: ChannelType.GuildText,
@@ -224,19 +231,16 @@ client.on(Events.InteractionCreate, async interaction => {
           });
         }
 
-        const existingFiles = interaction.guild.channels.cache.find(
-          c => c.name === 'files' && c.parentId === category.id
-        );
-
-        if (!existingFiles) {
+        // 🔊 VOICE CALL
+        if (!interaction.guild.channels.cache.find(c => c.name === 'Voice Call' && c.parentId === category.id)) {
           await interaction.guild.channels.create({
-            name: 'files',
-            type: ChannelType.GuildText,
+            name: 'Voice Call',
+            type: ChannelType.GuildVoice,
             parent: category.id
           });
         }
 
-        // 📩 DM USER
+        // 📩 DM
         try {
           await member.send(`✅ You’ve been approved! Your company space is ready 🎉`);
         } catch {}
@@ -253,9 +257,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const member = await interaction.guild.members.fetch(userId);
 
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
-        if (pendingRole) {
-          await member.roles.remove(pendingRole);
-        }
+        if (pendingRole) await member.roles.remove(pendingRole);
 
         await interaction.reply({
           content: `❌ Rejected ${member.user.username}`,
