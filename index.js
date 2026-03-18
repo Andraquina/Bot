@@ -147,12 +147,12 @@ client.on(Events.InteractionCreate, async interaction => {
         );
 
         const approveBtn = new ButtonBuilder()
-          .setCustomId(`approve_${member.id}_${company}_${welcomeMsg.id}`)
+          .setCustomId(`approve_${member.id}_${company}_${interaction.channel.id}_${welcomeMsg.id}`)
           .setLabel('Approve')
           .setStyle(ButtonStyle.Success);
 
         const rejectBtn = new ButtonBuilder()
-          .setCustomId(`reject_${member.id}_${welcomeMsg.id}`)
+          .setCustomId(`reject_${member.id}_${interaction.channel.id}_${welcomeMsg.id}`)
           .setLabel('Reject')
           .setStyle(ButtonStyle.Danger);
 
@@ -184,14 +184,17 @@ client.on(Events.InteractionCreate, async interaction => {
       const parts = interaction.customId.split('_');
       const action = parts[0];
 
+      // =========================
       // ✅ APPROVE
+      // =========================
       if (action === "approve") {
 
         await interaction.deferReply({ ephemeral: true });
 
         const userId = parts[1];
         const company = parts[2];
-        const welcomeMsgId = parts[3];
+        const channelId = parts[3];
+        const welcomeMsgId = parts[4];
 
         const member = await interaction.guild.members.fetch(userId);
 
@@ -252,22 +255,18 @@ client.on(Events.InteractionCreate, async interaction => {
             parent: category.id
           });
 
-          // 🔊 SAFE VOICE CREATION
-          try {
-            await interaction.guild.channels.create({
-              name: 'Voice Call',
-              type: ChannelType.GuildVoice,
-              parent: category.id,
-              permissionOverwrites: permissionOverwrites
-            });
-          } catch (err) {
-            console.error("Voice channel error:", err);
-          }
+          await interaction.guild.channels.create({
+            name: 'Voice Call',
+            type: ChannelType.GuildVoice,
+            parent: category.id,
+            permissionOverwrites: permissionOverwrites
+          });
         }
 
         // 🧹 DELETE WELCOME MESSAGE
         try {
-          const msg = await interaction.channel.messages.fetch(welcomeMsgId);
+          const welcomeChannel = interaction.guild.channels.cache.get(channelId);
+          const msg = await welcomeChannel.messages.fetch(welcomeMsgId);
           await msg.delete();
         } catch {}
 
@@ -283,13 +282,16 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
+      // =========================
       // ❌ REJECT
+      // =========================
       if (action === "reject") {
 
         await interaction.deferReply({ ephemeral: true });
 
         const userId = parts[1];
-        const welcomeMsgId = parts[2];
+        const channelId = parts[2];
+        const welcomeMsgId = parts[3];
 
         const member = await interaction.guild.members.fetch(userId);
 
@@ -297,7 +299,8 @@ client.on(Events.InteractionCreate, async interaction => {
         if (pendingRole) await member.roles.remove(pendingRole);
 
         try {
-          const msg = await interaction.channel.messages.fetch(welcomeMsgId);
+          const welcomeChannel = interaction.guild.channels.cache.get(channelId);
+          const msg = await welcomeChannel.messages.fetch(welcomeMsgId);
           await msg.delete();
         } catch {}
 
