@@ -117,18 +117,12 @@ client.on(Events.InteractionCreate, async interaction => {
           await member.roles.add(pendingRole);
         }
 
-        const waitingChannel = interaction.guild.channels.cache.find(
-          c => c.name === "waiting-room"
+        // ✅ SAME CHANNEL MESSAGE (UPDATED)
+        interaction.channel.send(
+          `👋 Welcome <@${member.id}>\n\n` +
+          `It seems you're new to us.\n` +
+          `We’re setting everything up for you now.`
         );
-
-        if (waitingChannel) {
-          waitingChannel.send(
-            `Hey <@${member.id}> 👋\n\n` +
-            `It seems you're new to us.\n` +
-            `Give us a few minutes to set everything up for you.\n` +
-            `This will take approximately a few minutes ⏳`
-          );
-        }
 
         // 🔘 ADMIN BUTTONS
         const approveBtn = new ButtonBuilder()
@@ -189,7 +183,6 @@ client.on(Events.InteractionCreate, async interaction => {
           });
         }
 
-        // remove pending
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
         if (pendingRole) {
           await member.roles.remove(pendingRole);
@@ -197,10 +190,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         await member.roles.add(role);
 
-        // =========================
-        // 🚀 CREATE CHANNELS (SAFE)
-        // =========================
-
+        // 🚀 CREATE CHANNELS
         let category = interaction.guild.channels.cache.find(
           c => c.name === company && c.type === ChannelType.GuildCategory
         );
@@ -222,7 +212,6 @@ client.on(Events.InteractionCreate, async interaction => {
           });
         }
 
-        // create channels only if they don't exist
         const existingGeneral = interaction.guild.channels.cache.find(
           c => c.name === 'general' && c.parentId === category.id
         );
@@ -247,7 +236,7 @@ client.on(Events.InteractionCreate, async interaction => {
           });
         }
 
-        // 📩 DM user
+        // 📩 DM USER
         try {
           await member.send(`✅ You’ve been approved! Your company space is ready 🎉`);
         } catch {}
