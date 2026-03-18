@@ -87,16 +87,22 @@ client.on(Events.InteractionCreate, async interaction => {
       const clean = str => str.toLowerCase().replace(/\s+/g, '');
       const input = clean(company);
 
-      let role = interaction.guild.roles.cache.find(r => {
-        const roleName = clean(r.name);
-        return input.includes(roleName) || roleName.includes(input);
-      });
+      let role = interaction.guild.roles.cache.find(r =>
+        clean(r.name) === input
+      );
+
+      const category = interaction.guild.channels.cache.find(
+        c => clean(c.name) === input &&
+        c.type === ChannelType.GuildCategory
+      );
 
       try {
         await member.setNickname(`${name} | ${company}`);
       } catch {}
 
-      if (role) {
+      // ✅ EXISTING COMPANY (ROLE + CATEGORY)
+      if (role && category) {
+
         await member.roles.add(role);
 
         await interaction.editReply({
@@ -104,6 +110,8 @@ client.on(Events.InteractionCreate, async interaction => {
         });
 
       } else {
+
+        // ❗ NEW / INCOMPLETE COMPANY FLOW
 
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
         if (pendingRole) await member.roles.add(pendingRole);
@@ -160,10 +168,10 @@ client.on(Events.InteractionCreate, async interaction => {
         const member = await interaction.guild.members.fetch(userId);
 
         const clean = str => str.toLowerCase().replace(/\s+/g, '');
+        const input = clean(company);
 
-        // 🔍 ROLE (reuse or create)
         let role = interaction.guild.roles.cache.find(r =>
-          clean(r.name) === clean(company)
+          clean(r.name) === input
         );
 
         if (!role) {
@@ -175,7 +183,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         await member.roles.add(role);
 
-        // 🔐 FIXED PERMISSIONS
+        // 🔐 PERMISSIONS
         const permissionOverwrites = [
           {
             id: interaction.guild.id,
@@ -202,27 +210,25 @@ client.on(Events.InteractionCreate, async interaction => {
           }
         ];
 
-        // 🔍 CATEGORY (reuse or create)
         let category = interaction.guild.channels.cache.find(
-          c => clean(c.name) === clean(company) &&
+          c => clean(c.name) === input &&
           c.type === ChannelType.GuildCategory
         );
 
         if (!category) {
+
           category = await interaction.guild.channels.create({
             name: company,
             type: ChannelType.GuildCategory,
             permissionOverwrites: permissionOverwrites
           });
 
-          // 📄 GENERAL
           await interaction.guild.channels.create({
             name: 'general',
             type: ChannelType.GuildText,
             parent: category.id
           });
 
-          // 🔊 VOICE
           await interaction.guild.channels.create({
             name: 'Voice Call',
             type: ChannelType.GuildVoice,
@@ -230,7 +236,6 @@ client.on(Events.InteractionCreate, async interaction => {
           });
         }
 
-        // DM
         try {
           await member.send(`✅ You’ve been approved! You now have access to ${company} 🎉`);
         } catch {}
