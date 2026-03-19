@@ -15,6 +15,7 @@ const {
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
   ]
@@ -51,22 +52,32 @@ function isSameCompany(a, b) {
 }
 
 
-// 🔘 SETUP COMMAND
-client.on(Events.MessageCreate, async message => {
-  if (message.author.bot) return;
+// =========================
+// 👋 ON USER JOIN (HYBRID)
+// =========================
+client.on(Events.GuildMemberAdd, async member => {
 
-  if (message.content.toLowerCase() === '!setup') {
-    const button = new ButtonBuilder()
-      .setCustomId('open_form')
-      .setLabel('Start')
-      .setStyle(ButtonStyle.Primary);
+  const button = new ButtonBuilder()
+    .setCustomId('open_form')
+    .setLabel('Start Setup')
+    .setStyle(ButtonStyle.Primary);
 
-    const row = new ActionRowBuilder().addComponents(button);
+  const row = new ActionRowBuilder().addComponents(button);
 
-    await message.channel.send({
-      content: 'Click below to enter your info:',
+  try {
+    await member.send({
+      content: "👋 Welcome! Click below to get started:",
       components: [row]
     });
+  } catch {
+    const channel = member.guild.channels.cache.find(c => c.name === "welcome");
+
+    if (channel) {
+      channel.send({
+        content: `<@${member.id}> Welcome! Click below to get started:`,
+        components: [row]
+      });
+    }
   }
 });
 
@@ -140,19 +151,13 @@ client.on(Events.InteractionCreate, async interaction => {
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
         if (pendingRole) await member.roles.add(pendingRole);
 
-        const welcomeMsg = await interaction.channel.send(
-          `👋 Welcome <@${member.id}>\n\n` +
-          `It seems you're new to us.\n` +
-          `We’re setting everything up for you now.`
-        );
-
         const approveBtn = new ButtonBuilder()
-          .setCustomId(`approve_${member.id}_${company}_${interaction.channel.id}_${welcomeMsg.id}`)
+          .setCustomId(`approve_${member.id}_${company}`)
           .setLabel('Approve')
           .setStyle(ButtonStyle.Success);
 
         const rejectBtn = new ButtonBuilder()
-          .setCustomId(`reject_${member.id}_${interaction.channel.id}_${welcomeMsg.id}`)
+          .setCustomId(`reject_${member.id}`)
           .setLabel('Reject')
           .setStyle(ButtonStyle.Danger);
 
@@ -171,145 +176,120 @@ client.on(Events.InteractionCreate, async interaction => {
         }
 
         await interaction.editReply({
-          content: `Thanks ${name}! We’re setting things up for you ⏳`
+          content: `Thanks! We’re setting things up for you ⏳`
         });
       }
     }
 
     // =========================
-    // ✅ APPROVE / REJECT
+    // ✅ APPROVE
     // =========================
-    if (interaction.isButton()) {
+    if (interaction.isButton() && interaction.customId.startsWith("approve_")) {
+
+      await interaction.deferReply({ ephemeral: true });
 
       const parts = interaction.customId.split('_');
-      const action = parts[0];
+      const userId = parts[1];
+      const company = parts.slice(2).join('_');
 
-      // =========================
-      // ✅ APPROVE
-      // =========================
-      if (action === "approve") {
+      const member = await interaction.guild.members.fetch(userId);
 
-        await interaction.deferReply({ ephemeral: true });
+      let role = interaction.guild.roles.cache.find(r =>
+        isSameCompany(r.name, company)
+      );
 
-        const userId = parts[1];
-        const company = parts[2];
-        const channelId = parts[3];
-        const welcomeMsgId = parts[4];
+      if (!role) {
+        role = await interaction.guild.roles.create({ name: company });
+      }
 
-        const member = await interaction.guild.members.fetch(userId);
+      const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
+      if (pendingRole) await member.roles.remove(pendingRole);
 
-        let role = interaction.guild.roles.cache.find(r =>
-          isSameCompany(r.name, company)
-        );
+      await member.roles.add(role);
 
-        if (!role) {
-          role = await interaction.guild.roles.create({ name: company });
+      const permissionOverwrites = [
+        {
+          id: interaction.guild.id,
+          deny: [PermissionsBitField.Flags.ViewChannel],
+        },
+        {
+          id: role.id,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages,
+            PermissionsBitField.Flags.ReadMessageHistory,
+            PermissionsBitField.Flags.Connect,
+            PermissionsBitField.Flags.Speak
+          ]
         }
+      ];
 
-        const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
-        if (pendingRole) await member.roles.remove(pendingRole);
+      let category = interaction.guild.channels.cache.find(c =>
+        c.type === ChannelType.GuildCategory &&
+        isSameCompany(c.name, company)
+      );
 
-        await member.roles.add(role);
+      if (!category) {
+        category = await interaction.guild.channels.create({
+          name: company,
+          type: ChannelType.GuildCategory,
+          permissionOverwrites
+        });
 
-        const permissionOverwrites = [
-          {
-            id: interaction.guild.id,
-            deny: [PermissionsBitField.Flags.ViewChannel],
-          },
-          {
-            id: role.id,
-            allow: [
-              PermissionsBitField.Flags.ViewChannel,
-              PermissionsBitField.Flags.SendMessages,
-              PermissionsBitField.Flags.SendMessagesInThreads,
-              PermissionsBitField.Flags.CreatePublicThreads,
-              PermissionsBitField.Flags.EmbedLinks,
-              PermissionsBitField.Flags.AttachFiles,
-              PermissionsBitField.Flags.AddReactions,
-              PermissionsBitField.Flags.UseExternalEmojis,
-              PermissionsBitField.Flags.UseExternalStickers,
-              PermissionsBitField.Flags.ManageMessages,
-              PermissionsBitField.Flags.ReadMessageHistory,
-              PermissionsBitField.Flags.SendTTSMessages,
-              PermissionsBitField.Flags.Connect,
-              PermissionsBitField.Flags.Speak
-            ]
-          }
-        ];
+        await interaction.guild.channels.create({
+          name: 'general',
+          type: ChannelType.GuildText,
+          parent: category.id
+        });
 
-        let category = interaction.guild.channels.cache.find(c =>
-          c.type === ChannelType.GuildCategory &&
-          isSameCompany(c.name, company)
-        );
-
-        if (!category) {
-          category = await interaction.guild.channels.create({
-            name: company,
-            type: ChannelType.GuildCategory,
-            permissionOverwrites: permissionOverwrites
-          });
-
-          await interaction.guild.channels.create({
-            name: 'general',
-            type: ChannelType.GuildText,
-            parent: category.id
-          });
-
+        try {
           await interaction.guild.channels.create({
             name: 'Voice Call',
             type: ChannelType.GuildVoice,
             parent: category.id,
-            permissionOverwrites: permissionOverwrites
+            permissionOverwrites
           });
+        } catch (err) {
+          console.log("Voice error:", err.message);
         }
-
-        // 🧹 DELETE WELCOME MESSAGE
-        try {
-          const welcomeChannel = interaction.guild.channels.cache.get(channelId);
-          const msg = await welcomeChannel.messages.fetch(welcomeMsgId);
-          await msg.delete();
-        } catch {}
-
-        // 🧹 DELETE ADMIN MESSAGE
-        await interaction.message.delete().catch(() => {});
-
-        try {
-          await member.send(`✅ You’ve been approved! Welcome to ${company} 🎉`);
-        } catch {}
-
-        await interaction.editReply({
-          content: `✅ Approved ${member.user.username}`
-        });
       }
 
-      // =========================
-      // ❌ REJECT
-      // =========================
-      if (action === "reject") {
+      // 🔥 HIDE WELCOME CHANNEL FROM THIS ROLE
+      const welcomeChannel = interaction.guild.channels.cache.find(c => c.name === "welcome");
 
-        await interaction.deferReply({ ephemeral: true });
-
-        const userId = parts[1];
-        const channelId = parts[2];
-        const welcomeMsgId = parts[3];
-
-        const member = await interaction.guild.members.fetch(userId);
-
-        const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
-        if (pendingRole) await member.roles.remove(pendingRole);
-
+      if (welcomeChannel) {
         try {
-          const welcomeChannel = interaction.guild.channels.cache.get(channelId);
-          const msg = await welcomeChannel.messages.fetch(welcomeMsgId);
-          await msg.delete();
+          await welcomeChannel.permissionOverwrites.edit(role.id, {
+            ViewChannel: false
+          });
         } catch {}
-
-        await interaction.message.delete().catch(() => {});
-
-        await interaction.editReply({
-          content: `❌ Rejected ${member.user.username}`
-        });
       }
+
+      await interaction.message.delete().catch(() => {});
+
+      await interaction.editReply({
+        content: `✅ Approved ${member.user.username}`
+      });
+    }
+
+    // =========================
+    // ❌ REJECT
+    // =========================
+    if (interaction.isButton() && interaction.customId.startsWith("reject_")) {
+
+      await interaction.deferReply({ ephemeral: true });
+
+      const userId = interaction.customId.split('_')[1];
+      const member = await interaction.guild.members.fetch(userId);
+
+      const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
+      if (pendingRole) await member.roles.remove(pendingRole);
+
+      await interaction.message.delete().catch(() => {});
+
+      await interaction.editReply({
+        content: `❌ Rejected ${member.user.username}`
+      });
     }
 
   } catch (error) {
