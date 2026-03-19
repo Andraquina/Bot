@@ -222,21 +222,21 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await member.roles.add(role);
 
-      // 🔥 GIVE ACCESS TO GLOBAL CHANNELS
-      const globalChannels = ["announcements", "rules"];
+      // 🔥 FIXED: CATEGORY PERMISSIONS
+      const globalCategory = interaction.guild.channels.cache.find(
+        c => c.type === ChannelType.GuildCategory &&
+        c.name.toLowerCase().includes("info")
+      );
 
-      for (const chName of globalChannels) {
-        const ch = interaction.guild.channels.cache.find(c => c.name === chName);
-        if (ch) {
-          await ch.permissionOverwrites.edit(role.id, {
-            ViewChannel: true,
-            ReadMessageHistory: true,
-            SendMessages: false
-          });
-        }
+      if (globalCategory) {
+        await globalCategory.permissionOverwrites.edit(role.id, {
+          ViewChannel: true,
+          ReadMessageHistory: true,
+          SendMessages: false
+        });
       }
 
-      // 🔥 CREATE COMPANY CHANNELS
+      // 🔥 COMPANY CHANNELS
       const permissionOverwrites = [
         {
           id: interaction.guild.id,
@@ -280,7 +280,7 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
-      // 🔥 HIDE WELCOME CHANNEL
+      // 🔒 HIDE WELCOME
       const welcomeChannel = interaction.guild.channels.cache.find(c => c.name === "welcome");
       if (welcomeChannel) {
         await welcomeChannel.permissionOverwrites.edit(role.id, {
@@ -288,7 +288,7 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
-      // ✅ DM
+      // 📩 DM
       try {
         await member.send(`✅ You’ve been approved! Welcome to **Inter Molds, Inc.** 🎉`);
       } catch {}
