@@ -92,17 +92,12 @@ client.on(Events.GuildMemberAdd, async member => {
 client.on(Events.InteractionCreate, async interaction => {
   try {
 
-    // =========================
-    // 🔘 OPEN FORM (DELETE MESSAGE HERE)
-    // =========================
+    // 🔘 OPEN FORM
     if (interaction.isButton() && interaction.customId === 'open_form') {
 
-      // 🧹 DELETE WELCOME MESSAGE
       try {
         await interaction.message.delete();
-      } catch (err) {
-        console.log("Delete failed:", err.message);
-      }
+      } catch {}
 
       const modal = new ModalBuilder()
         .setCustomId('user_form')
@@ -152,9 +147,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       try {
         await member.setNickname(`${name} | ${company}`);
-      } catch (err) {
-        console.log("Nickname error:", err.message);
-      }
+      } catch {}
 
       if (role && category) {
 
@@ -229,6 +222,21 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await member.roles.add(role);
 
+      // 🔥 GIVE ACCESS TO GLOBAL CHANNELS
+      const globalChannels = ["announcements", "rules"];
+
+      for (const chName of globalChannels) {
+        const ch = interaction.guild.channels.cache.find(c => c.name === chName);
+        if (ch) {
+          await ch.permissionOverwrites.edit(role.id, {
+            ViewChannel: true,
+            ReadMessageHistory: true,
+            SendMessages: false
+          });
+        }
+      }
+
+      // 🔥 CREATE COMPANY CHANNELS
       const permissionOverwrites = [
         {
           id: interaction.guild.id,
@@ -264,27 +272,23 @@ client.on(Events.InteractionCreate, async interaction => {
           parent: category.id
         });
 
-        try {
-          await interaction.guild.channels.create({
-            name: 'Voice Call',
-            type: ChannelType.GuildVoice,
-            parent: category.id,
-            permissionOverwrites
-          });
-        } catch (err) {
-          console.log("Voice error:", err.message);
-        }
+        await interaction.guild.channels.create({
+          name: 'Voice Call',
+          type: ChannelType.GuildVoice,
+          parent: category.id,
+          permissionOverwrites
+        });
       }
 
+      // 🔥 HIDE WELCOME CHANNEL
       const welcomeChannel = interaction.guild.channels.cache.find(c => c.name === "welcome");
-
       if (welcomeChannel) {
         await welcomeChannel.permissionOverwrites.edit(role.id, {
           ViewChannel: false
         });
       }
 
-      // ✅ DM ON APPROVAL
+      // ✅ DM
       try {
         await member.send(`✅ You’ve been approved! Welcome to **Inter Molds, Inc.** 🎉`);
       } catch {}
@@ -296,9 +300,7 @@ client.on(Events.InteractionCreate, async interaction => {
       });
     }
 
-    // =========================
     // ❌ REJECT
-    // =========================
     if (interaction.isButton() && interaction.customId.startsWith("reject_")) {
 
       await interaction.deferReply({ ephemeral: true });
