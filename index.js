@@ -231,7 +231,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (!category) {
         category = await interaction.guild.channels.create({
-          name: company,
+          name: company, // ✅ CLEAN NAME (no IDs)
           type: ChannelType.GuildCategory,
           permissionOverwrites
         });
