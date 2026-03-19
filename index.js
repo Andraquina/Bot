@@ -51,12 +51,10 @@ function isSameCompany(a, b) {
   return wordsA.some(w => wordsB.includes(w));
 }
 
-// SAFE ID
 function safeCompanyId(str) {
   return str.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
 }
 
-// ✅ NEW: FORMAT COMPANY NAME
 function formatCompanyName(str) {
   return str
     .toLowerCase()
@@ -67,7 +65,7 @@ function formatCompanyName(str) {
 
 
 // =========================
-// 👋 ON USER JOIN (CHANNEL ONLY)
+// 👋 ON USER JOIN (AUTO CLEAN)
 // =========================
 client.on(Events.GuildMemberAdd, async member => {
 
@@ -81,10 +79,15 @@ client.on(Events.GuildMemberAdd, async member => {
 
   const row = new ActionRowBuilder().addComponents(button);
 
-  await channel.send({
+  const msg = await channel.send({
     content: `<@${member.id}> Welcome! Click below to get started:`,
     components: [row]
   });
+
+  // 🧹 AUTO DELETE AFTER 60 SECONDS
+  setTimeout(() => {
+    msg.delete().catch(() => {});
+  }, 60000);
 });
 
 
@@ -274,12 +277,10 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
-      // ✅ FIXED DM MESSAGE
+      // ✅ DM ON APPROVAL
       try {
         await member.send(`✅ You’ve been approved! Welcome to **Inter Molds, Inc.** 🎉`);
-      } catch {
-        console.log("User has DMs closed");
-      }
+      } catch {}
 
       await interaction.message.delete().catch(() => {});
 
