@@ -56,6 +56,15 @@ function safeCompanyId(str) {
   return str.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
 }
 
+// ✅ NEW: FORMAT COMPANY NAME
+function formatCompanyName(str) {
+  return str
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 
 // =========================
 // 👋 ON USER JOIN (CHANNEL ONLY)
@@ -119,8 +128,10 @@ client.on(Events.InteractionCreate, async interaction => {
       await interaction.deferReply({ ephemeral: true });
 
       const name = interaction.fields.getTextInputValue('name');
-      const company = interaction.fields.getTextInputValue('company');
+      let company = interaction.fields.getTextInputValue('company');
       const member = interaction.member;
+
+      company = formatCompanyName(company);
 
       let role = interaction.guild.roles.cache.find(r =>
         isSameCompany(r.name, company)
@@ -195,10 +206,12 @@ client.on(Events.InteractionCreate, async interaction => {
         isSameCompany(r.name, companyId)
       );
 
-      let company = role ? role.name : companyId;
+      let company = role ? role.name : formatCompanyName(companyId);
 
       if (!role) {
-        role = await interaction.guild.roles.create({ name: company });
+        role = await interaction.guild.roles.create({
+          name: formatCompanyName(company)
+        });
       }
 
       const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
@@ -230,7 +243,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (!category) {
         category = await interaction.guild.channels.create({
-          name: company,
+          name: formatCompanyName(company),
           type: ChannelType.GuildCategory,
           permissionOverwrites
         });
@@ -253,17 +266,17 @@ client.on(Events.InteractionCreate, async interaction => {
         }
       }
 
-      // 🔥 HIDE WELCOME CHANNEL
       const welcomeChannel = interaction.guild.channels.cache.find(c => c.name === "welcome");
+
       if (welcomeChannel) {
         await welcomeChannel.permissionOverwrites.edit(role.id, {
           ViewChannel: false
         });
       }
 
-      // ✅ DM USER ON APPROVAL
+      // ✅ FIXED DM MESSAGE
       try {
-        await member.send(`✅ You’ve been approved! Welcome to **${company}** 🎉`);
+        await member.send(`✅ You’ve been approved! Welcome to **Inter Molds, Inc.** 🎉`);
       } catch {
         console.log("User has DMs closed");
       }
