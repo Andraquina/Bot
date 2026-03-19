@@ -65,7 +65,7 @@ function formatCompanyName(str) {
 
 
 // =========================
-// 👋 ON USER JOIN (AUTO DELETE FIXED)
+// 👋 ON USER JOIN (DELETE FIXED)
 // =========================
 client.on(Events.GuildMemberAdd, async member => {
 
@@ -87,8 +87,7 @@ client.on(Events.GuildMemberAdd, async member => {
   // ✅ RELIABLE DELETE
   setTimeout(async () => {
     try {
-      const fetched = await channel.messages.fetch(msg.id);
-      await fetched.delete();
+      await msg.delete();
     } catch (err) {
       console.log("Delete failed:", err.message);
     }
