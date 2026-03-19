@@ -63,6 +63,15 @@ function formatCompanyName(str) {
     .join(' ');
 }
 
+// 🔥 NEW: ACRONYM FUNCTION
+function getAcronym(company) {
+  const words = company.split(' ');
+
+  if (words.length === 1) return company; // keep single word
+
+  return words.map(w => w[0].toUpperCase()).join('');
+}
+
 
 // =========================
 // 👋 ON USER JOIN
@@ -136,6 +145,9 @@ client.on(Events.InteractionCreate, async interaction => {
 
       company = formatCompanyName(company);
 
+      // 🔥 APPLY ACRONYM HERE
+      const companyShort = getAcronym(company);
+
       let role = interaction.guild.roles.cache.find(r =>
         isSameCompany(r.name, company)
       );
@@ -146,7 +158,13 @@ client.on(Events.InteractionCreate, async interaction => {
       );
 
       try {
-        await member.setNickname(`${name} | ${company}`);
+        let nickname = `${name} | ${companyShort}`;
+
+        if (nickname.length > 32) {
+          nickname = nickname.slice(0, 32);
+        }
+
+        await member.setNickname(nickname);
       } catch {}
 
       if (role && category) {
@@ -222,25 +240,20 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await member.roles.add(role);
 
-      // 🔥 FIXED: FORCE ACCESS TO ANNOUNCEMENTS + RULES
+      // 🔥 ACCESS TO ANNOUNCEMENTS + RULES
       for (const ch of interaction.guild.channels.cache.values()) {
         if (
           ch.name.toLowerCase().includes("announcement") ||
           ch.name.toLowerCase().includes("rule")
         ) {
-          try {
-            await ch.permissionOverwrites.edit(role.id, {
-              ViewChannel: true,
-              ReadMessageHistory: true,
-              SendMessages: false
-            });
-          } catch (err) {
-            console.log("Permission error:", err.message);
-          }
+          await ch.permissionOverwrites.edit(role.id, {
+            ViewChannel: true,
+            ReadMessageHistory: true,
+            SendMessages: false
+          });
         }
       }
 
-      // 🔥 COMPANY CHANNELS
       const permissionOverwrites = [
         {
           id: interaction.guild.id,
@@ -284,7 +297,6 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
-      // 🔒 HIDE WELCOME
       const welcomeChannel = interaction.guild.channels.cache.find(c => c.name === "welcome");
       if (welcomeChannel) {
         await welcomeChannel.permissionOverwrites.edit(role.id, {
@@ -292,7 +304,6 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
-      // 📩 DM
       try {
         await member.send(`✅ You’ve been approved! Welcome to **Inter Molds, Inc.** 🎉`);
       } catch {}
@@ -301,24 +312,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await interaction.editReply({
         content: `✅ Approved ${member.user.username}`
-      });
-    }
-
-    // ❌ REJECT
-    if (interaction.isButton() && interaction.customId.startsWith("reject_")) {
-
-      await interaction.deferReply({ ephemeral: true });
-
-      const userId = interaction.customId.split('_')[1];
-      const member = await interaction.guild.members.fetch(userId);
-
-      const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
-      if (pendingRole) await member.roles.remove(pendingRole);
-
-      await interaction.message.delete().catch(() => {});
-
-      await interaction.editReply({
-        content: `❌ Rejected ${member.user.username}`
       });
     }
 
