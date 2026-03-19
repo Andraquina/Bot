@@ -79,19 +79,10 @@ client.on(Events.GuildMemberAdd, async member => {
 
   const row = new ActionRowBuilder().addComponents(button);
 
-  const msg = await channel.send({
+  await channel.send({
     content: `<@${member.id}> Welcome! Click below to get started:`,
     components: [row]
   });
-
-  // ✅ AUTO DELETE (FIXED)
-  setTimeout(async () => {
-    try {
-      await msg.delete();
-    } catch (err) {
-      console.log("Delete failed:", err.message);
-    }
-  }, 60000);
 });
 
 
@@ -102,9 +93,16 @@ client.on(Events.InteractionCreate, async interaction => {
   try {
 
     // =========================
-    // 🔘 OPEN FORM
+    // 🔘 OPEN FORM (DELETE MESSAGE HERE)
     // =========================
     if (interaction.isButton() && interaction.customId === 'open_form') {
+
+      // 🧹 DELETE WELCOME MESSAGE
+      try {
+        await interaction.message.delete();
+      } catch (err) {
+        console.log("Delete failed:", err.message);
+      }
 
       const modal = new ModalBuilder()
         .setCustomId('user_form')
@@ -130,7 +128,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // 📋 FORM SUBMIT (FIXED)
+    // 📋 FORM SUBMIT
     // =========================
     if (interaction.isModalSubmit() && interaction.customId === 'user_form') {
 
@@ -286,7 +284,7 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
-      // ✅ DM MESSAGE (FIXED TEXT)
+      // ✅ DM ON APPROVAL
       try {
         await member.send(`✅ You’ve been approved! Welcome to **Inter Molds, Inc.** 🎉`);
       } catch {}
