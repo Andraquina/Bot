@@ -51,6 +51,11 @@ function isSameCompany(a, b) {
   return wordsA.some(w => wordsB.includes(w));
 }
 
+// ✅ NEW: SAFE COMPANY ID (FIX)
+function safeCompanyId(str) {
+  return str.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+}
+
 
 // =========================
 // 👋 ON USER JOIN (HYBRID)
@@ -151,13 +156,14 @@ client.on(Events.InteractionCreate, async interaction => {
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
         if (pendingRole) await member.roles.add(pendingRole);
 
+        // ✅ FIXED BUTTON IDS
         const approveBtn = new ButtonBuilder()
-          .setCustomId(`approve_${member.id}_${company}`)
+          .setCustomId(`approve_${member.id}_${safeCompanyId(company)}`)
           .setLabel('Approve')
           .setStyle(ButtonStyle.Success);
 
         const rejectBtn = new ButtonBuilder()
-          .setCustomId(`reject_${member.id}`)
+          .setCustomId(`reject_${member.id}_${safeCompanyId(company)}`)
           .setLabel('Reject')
           .setStyle(ButtonStyle.Danger);
 
@@ -190,13 +196,16 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const parts = interaction.customId.split('_');
       const userId = parts[1];
-      const company = parts.slice(2).join('_');
+      const companyId = parts[2];
 
       const member = await interaction.guild.members.fetch(userId);
 
+      // ✅ FIND REAL COMPANY NAME
       let role = interaction.guild.roles.cache.find(r =>
-        isSameCompany(r.name, company)
+        isSameCompany(r.name, companyId)
       );
+
+      let company = role ? role.name : companyId;
 
       if (!role) {
         role = await interaction.guild.roles.create({ name: company });
@@ -231,7 +240,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (!category) {
         category = await interaction.guild.channels.create({
-          name: company, // ✅ CLEAN NAME (no IDs)
+          name: company, // ✅ CLEAN NAME
           type: ChannelType.GuildCategory,
           permissionOverwrites
         });
@@ -254,7 +263,7 @@ client.on(Events.InteractionCreate, async interaction => {
         }
       }
 
-      // 🔥 HIDE WELCOME CHANNEL FROM THIS ROLE
+      // ✅ HIDE WELCOME CHANNEL
       const welcomeChannel = interaction.guild.channels.cache.find(c => c.name === "welcome");
 
       if (welcomeChannel) {
