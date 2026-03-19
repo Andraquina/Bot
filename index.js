@@ -51,7 +51,7 @@ function isSameCompany(a, b) {
   return wordsA.some(w => wordsB.includes(w));
 }
 
-// ✅ SAFE COMPANY ID
+// SAFE ID
 function safeCompanyId(str) {
   return str.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
 }
@@ -63,7 +63,6 @@ function safeCompanyId(str) {
 client.on(Events.GuildMemberAdd, async member => {
 
   const channel = member.guild.channels.cache.find(c => c.name === "welcome");
-
   if (!channel) return;
 
   const button = new ButtonBuilder()
@@ -254,15 +253,19 @@ client.on(Events.InteractionCreate, async interaction => {
         }
       }
 
-      // 🔥 HIDE WELCOME CHANNEL FROM APPROVED ROLE
+      // 🔥 HIDE WELCOME CHANNEL
       const welcomeChannel = interaction.guild.channels.cache.find(c => c.name === "welcome");
-
       if (welcomeChannel) {
-        try {
-          await welcomeChannel.permissionOverwrites.edit(role.id, {
-            ViewChannel: false
-          });
-        } catch {}
+        await welcomeChannel.permissionOverwrites.edit(role.id, {
+          ViewChannel: false
+        });
+      }
+
+      // ✅ DM USER ON APPROVAL
+      try {
+        await member.send(`✅ You’ve been approved! Welcome to **${company}** 🎉`);
+      } catch {
+        console.log("User has DMs closed");
       }
 
       await interaction.message.delete().catch(() => {});
