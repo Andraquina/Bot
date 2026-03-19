@@ -38,6 +38,24 @@ function extractKeywords(str) {
   return str.toLowerCase().split(/\s+/);
 }
 
+// 🔥 CAPITALIZE WORDS (NAME + COMPANY)
+function formatWords(str) {
+  return str
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(w => w.length > 0)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+// 🔥 ACRONYM
+function getAcronym(company) {
+  const words = company.toLowerCase().split(/\s+/);
+  if (words.length === 1) return company;
+  return words.map(w => w[0].toUpperCase()).join('');
+}
+
+// 🔥 SMART MATCHING
 function isSameCompany(a, b) {
   const na = normalize(a);
   const nb = normalize(b);
@@ -45,31 +63,21 @@ function isSameCompany(a, b) {
   if (na === nb) return true;
   if (na.includes(nb) || nb.includes(na)) return true;
 
+  const acA = getAcronym(a).toLowerCase();
+  const acB = getAcronym(b).toLowerCase();
+
+  if (acA === nb || acB === na) return true;
+
   const wordsA = extractKeywords(a);
   const wordsB = extractKeywords(b);
 
-  return wordsA.some(w => wordsB.includes(w));
+  const common = wordsA.filter(w => wordsB.includes(w));
+
+  return common.length >= Math.min(wordsA.length, wordsB.length) / 2;
 }
 
 function safeCompanyId(str) {
   return str.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
-}
-
-function formatCompanyName(str) {
-  return str
-    .toLowerCase()
-    .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
-
-// 🔥 NEW: ACRONYM FUNCTION
-function getAcronym(company) {
-  const words = company.split(' ');
-
-  if (words.length === 1) return company; // keep single word
-
-  return words.map(w => w[0].toUpperCase()).join('');
 }
 
 
@@ -138,14 +146,15 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await interaction.deferReply({ ephemeral: true });
 
-      const name = interaction.fields.getTextInputValue('name');
+      let name = interaction.fields.getTextInputValue('name');
       let company = interaction.fields.getTextInputValue('company');
 
       const member = await interaction.guild.members.fetch(interaction.user.id);
 
-      company = formatCompanyName(company);
+      // 🔥 FORMAT BOTH
+      name = formatWords(name);
+      company = formatWords(company);
 
-      // 🔥 APPLY ACRONYM HERE
       const companyShort = getAcronym(company);
 
       let role = interaction.guild.roles.cache.find(r =>
@@ -157,13 +166,10 @@ client.on(Events.InteractionCreate, async interaction => {
         isSameCompany(c.name, company)
       );
 
+      // 🔥 NICKNAME WITH LIMIT
       try {
         let nickname = `${name} | ${companyShort}`;
-
-        if (nickname.length > 32) {
-          nickname = nickname.slice(0, 32);
-        }
-
+        if (nickname.length > 32) nickname = nickname.slice(0, 32);
         await member.setNickname(nickname);
       } catch {}
 
@@ -227,11 +233,11 @@ client.on(Events.InteractionCreate, async interaction => {
         isSameCompany(r.name, companyId)
       );
 
-      let company = role ? role.name : formatCompanyName(companyId);
+      let company = role ? role.name : formatWords(companyId);
 
       if (!role) {
         role = await interaction.guild.roles.create({
-          name: formatCompanyName(company)
+          name: company
         });
       }
 
@@ -278,7 +284,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (!category) {
         category = await interaction.guild.channels.create({
-          name: formatCompanyName(company),
+          name: company,
           type: ChannelType.GuildCategory,
           permissionOverwrites
         });
