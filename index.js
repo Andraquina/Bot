@@ -27,7 +27,7 @@ client.once(Events.ClientReady, () => {
 
 
 // =========================
-// 🧠 SMART COMPANY MATCHING
+// 🧠 HELPERS
 // =========================
 
 function normalize(str) {
@@ -65,7 +65,7 @@ function formatCompanyName(str) {
 
 
 // =========================
-// 👋 ON USER JOIN (DELETE FIXED)
+// 👋 ON USER JOIN
 // =========================
 client.on(Events.GuildMemberAdd, async member => {
 
@@ -84,7 +84,7 @@ client.on(Events.GuildMemberAdd, async member => {
     components: [row]
   });
 
-  // ✅ RELIABLE DELETE
+  // ✅ AUTO DELETE (FIXED)
   setTimeout(async () => {
     try {
       await msg.delete();
@@ -101,7 +101,9 @@ client.on(Events.GuildMemberAdd, async member => {
 client.on(Events.InteractionCreate, async interaction => {
   try {
 
+    // =========================
     // 🔘 OPEN FORM
+    // =========================
     if (interaction.isButton() && interaction.customId === 'open_form') {
 
       const modal = new ModalBuilder()
@@ -128,7 +130,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // 📋 FORM SUBMIT
+    // 📋 FORM SUBMIT (FIXED)
     // =========================
     if (interaction.isModalSubmit() && interaction.customId === 'user_form') {
 
@@ -136,7 +138,8 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const name = interaction.fields.getTextInputValue('name');
       let company = interaction.fields.getTextInputValue('company');
-      const member = interaction.member;
+
+      const member = await interaction.guild.members.fetch(interaction.user.id);
 
       company = formatCompanyName(company);
 
@@ -151,7 +154,9 @@ client.on(Events.InteractionCreate, async interaction => {
 
       try {
         await member.setNickname(`${name} | ${company}`);
-      } catch {}
+      } catch (err) {
+        console.log("Nickname error:", err.message);
+      }
 
       if (role && category) {
 
@@ -181,7 +186,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const adminChannel = interaction.guild.channels.cache.find(c => c.name === "admin");
 
         if (adminChannel) {
-          adminChannel.send({
+          await adminChannel.send({
             content:
               `🚨 New company request\n\n` +
               `User: <@${member.id}>\n` +
@@ -281,7 +286,7 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
-      // ✅ DM ON APPROVAL
+      // ✅ DM MESSAGE (FIXED TEXT)
       try {
         await member.send(`✅ You’ve been approved! Welcome to **Inter Molds, Inc.** 🎉`);
       } catch {}
