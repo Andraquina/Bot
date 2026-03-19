@@ -65,7 +65,7 @@ function formatCompanyName(str) {
 
 
 // =========================
-// 👋 ON USER JOIN (AUTO CLEAN)
+// 👋 ON USER JOIN (AUTO DELETE FIXED)
 // =========================
 client.on(Events.GuildMemberAdd, async member => {
 
@@ -84,9 +84,14 @@ client.on(Events.GuildMemberAdd, async member => {
     components: [row]
   });
 
-  // 🧹 AUTO DELETE AFTER 60 SECONDS
-  setTimeout(() => {
-    msg.delete().catch(() => {});
+  // ✅ RELIABLE DELETE
+  setTimeout(async () => {
+    try {
+      const fetched = await channel.messages.fetch(msg.id);
+      await fetched.delete();
+    } catch (err) {
+      console.log("Delete failed:", err.message);
+    }
   }, 60000);
 });
 
