@@ -222,18 +222,22 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await member.roles.add(role);
 
-      // 🔥 FIXED: CATEGORY PERMISSIONS
-      const globalCategory = interaction.guild.channels.cache.find(
-        c => c.type === ChannelType.GuildCategory &&
-        c.name.toLowerCase().includes("info")
-      );
-
-      if (globalCategory) {
-        await globalCategory.permissionOverwrites.edit(role.id, {
-          ViewChannel: true,
-          ReadMessageHistory: true,
-          SendMessages: false
-        });
+      // 🔥 FIXED: FORCE ACCESS TO ANNOUNCEMENTS + RULES
+      for (const ch of interaction.guild.channels.cache.values()) {
+        if (
+          ch.name.toLowerCase().includes("announcement") ||
+          ch.name.toLowerCase().includes("rule")
+        ) {
+          try {
+            await ch.permissionOverwrites.edit(role.id, {
+              ViewChannel: true,
+              ReadMessageHistory: true,
+              SendMessages: false
+            });
+          } catch (err) {
+            console.log("Permission error:", err.message);
+          }
+        }
       }
 
       // 🔥 COMPANY CHANNELS
