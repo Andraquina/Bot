@@ -292,7 +292,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
 
 // =========================
-// 📢 FINAL BROADCAST SYSTEM (; + /)
+// 📢 FINAL BROADCAST SYSTEM (! + ;)
 // =========================
 client.on(Events.MessageCreate, async message => {
 
@@ -305,18 +305,18 @@ client.on(Events.MessageCreate, async message => {
 
   const content = message.content.trim();
 
-  if (!content.startsWith("/")) {
-    return message.reply("❌ Use:\n`/company1;company2 / message`");
+  if (!content.startsWith("!")) {
+    return message.reply("❌ Use:\n`!company1;company2 ! message`");
   }
 
-  const parts = content.split("/").map(p => p.trim()).filter(p => p);
+  const parts = content.split("!").map(p => p.trim()).filter(p => p);
 
   if (parts.length < 2) {
-    return message.reply("❌ Correct format:\n`/targets / message`");
+    return message.reply("❌ Correct format:\n`!targets ! message`");
   }
 
   const targets = parts[0].toLowerCase().split(";").map(t => t.trim());
-  const messageContent = parts.slice(1).join(" / ");
+  const messageContent = parts.slice(1).join(" ! ");
 
   const members = await message.guild.members.fetch();
 
