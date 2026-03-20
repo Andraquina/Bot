@@ -38,7 +38,6 @@ function extractKeywords(str) {
   return str.toLowerCase().split(/\s+/);
 }
 
-// 🔥 CAPITALIZE WORDS (NAME + COMPANY)
 function formatWords(str) {
   return str
     .toLowerCase()
@@ -48,14 +47,12 @@ function formatWords(str) {
     .join(' ');
 }
 
-// 🔥 ACRONYM
 function getAcronym(company) {
   const words = company.toLowerCase().split(/\s+/);
   if (words.length === 1) return company;
   return words.map(w => w[0].toUpperCase()).join('');
 }
 
-// 🔥 SMART MATCHING
 function isSameCompany(a, b) {
   const na = normalize(a);
   const nb = normalize(b);
@@ -109,12 +106,9 @@ client.on(Events.GuildMemberAdd, async member => {
 client.on(Events.InteractionCreate, async interaction => {
   try {
 
-    // 🔘 OPEN FORM
     if (interaction.isButton() && interaction.customId === 'open_form') {
 
-      try {
-        await interaction.message.delete();
-      } catch {}
+      try { await interaction.message.delete(); } catch {}
 
       const modal = new ModalBuilder()
         .setCustomId('user_form')
@@ -139,21 +133,14 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
-    // =========================
-    // 📋 FORM SUBMIT
-    // =========================
     if (interaction.isModalSubmit() && interaction.customId === 'user_form') {
 
       await interaction.deferReply({ ephemeral: true });
 
-      let name = interaction.fields.getTextInputValue('name');
-      let company = interaction.fields.getTextInputValue('company');
+      let name = formatWords(interaction.fields.getTextInputValue('name'));
+      let company = formatWords(interaction.fields.getTextInputValue('company'));
 
       const member = await interaction.guild.members.fetch(interaction.user.id);
-
-      // 🔥 FORMAT BOTH
-      name = formatWords(name);
-      company = formatWords(company);
 
       const companyShort = getAcronym(company);
 
@@ -166,7 +153,6 @@ client.on(Events.InteractionCreate, async interaction => {
         isSameCompany(c.name, company)
       );
 
-      // 🔥 NICKNAME WITH LIMIT
       try {
         let nickname = `${name} | ${companyShort}`;
         if (nickname.length > 32) nickname = nickname.slice(0, 32);
@@ -186,26 +172,22 @@ client.on(Events.InteractionCreate, async interaction => {
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
         if (pendingRole) await member.roles.add(pendingRole);
 
-        const approveBtn = new ButtonBuilder()
-          .setCustomId(`approve_${member.id}_${safeCompanyId(company)}`)
-          .setLabel('Approve')
-          .setStyle(ButtonStyle.Success);
-
-        const rejectBtn = new ButtonBuilder()
-          .setCustomId(`reject_${member.id}_${safeCompanyId(company)}`)
-          .setLabel('Reject')
-          .setStyle(ButtonStyle.Danger);
-
-        const row = new ActionRowBuilder().addComponents(approveBtn, rejectBtn);
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`approve_${member.id}_${safeCompanyId(company)}`)
+            .setLabel('Approve')
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId(`reject_${member.id}_${safeCompanyId(company)}`)
+            .setLabel('Reject')
+            .setStyle(ButtonStyle.Danger)
+        );
 
         const adminChannel = interaction.guild.channels.cache.find(c => c.name === "admin");
 
         if (adminChannel) {
           await adminChannel.send({
-            content:
-              `🚨 New company request\n\n` +
-              `User: <@${member.id}>\n` +
-              `Company: ${company}`,
+            content: `🚨 New company request\n\nUser: <@${member.id}>\nCompany: ${company}`,
             components: [row]
           });
         }
@@ -216,16 +198,11 @@ client.on(Events.InteractionCreate, async interaction => {
       }
     }
 
-    // =========================
-    // ✅ APPROVE
-    // =========================
     if (interaction.isButton() && interaction.customId.startsWith("approve_")) {
 
       await interaction.deferReply({ ephemeral: true });
 
-      const parts = interaction.customId.split('_');
-      const userId = parts[1];
-      const companyId = parts[2];
+      const [_, userId, companyId] = interaction.customId.split('_');
 
       const member = await interaction.guild.members.fetch(userId);
 
@@ -236,9 +213,7 @@ client.on(Events.InteractionCreate, async interaction => {
       let company = role ? role.name : formatWords(companyId);
 
       if (!role) {
-        role = await interaction.guild.roles.create({
-          name: company
-        });
+        role = await interaction.guild.roles.create({ name: company });
       }
 
       const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
@@ -246,7 +221,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await member.roles.add(role);
 
-      // 🔥 ACCESS TO ANNOUNCEMENTS + RULES
+      // 🔥 ANNOUNCEMENTS + RULES ACCESS
       for (const ch of interaction.guild.channels.cache.values()) {
         if (
           ch.name.toLowerCase().includes("announcement") ||
@@ -255,27 +230,11 @@ client.on(Events.InteractionCreate, async interaction => {
           await ch.permissionOverwrites.edit(role.id, {
             ViewChannel: true,
             ReadMessageHistory: true,
-            SendMessages: false
+            SendMessages: false,
+            AddReactions: false
           });
         }
       }
-
-      const permissionOverwrites = [
-        {
-          id: interaction.guild.id,
-          deny: [PermissionsBitField.Flags.ViewChannel],
-        },
-        {
-          id: role.id,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages,
-            PermissionsBitField.Flags.ReadMessageHistory,
-            PermissionsBitField.Flags.Connect,
-            PermissionsBitField.Flags.Speak
-          ]
-        }
-      ];
 
       let category = interaction.guild.channels.cache.find(c =>
         c.type === ChannelType.GuildCategory &&
@@ -286,7 +245,19 @@ client.on(Events.InteractionCreate, async interaction => {
         category = await interaction.guild.channels.create({
           name: company,
           type: ChannelType.GuildCategory,
-          permissionOverwrites
+          permissionOverwrites: [
+            { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+            {
+              id: role.id,
+              allow: [
+                PermissionsBitField.Flags.ViewChannel,
+                PermissionsBitField.Flags.SendMessages,
+                PermissionsBitField.Flags.ReadMessageHistory,
+                PermissionsBitField.Flags.Connect,
+                PermissionsBitField.Flags.Speak
+              ]
+            }
+          ]
         });
 
         await interaction.guild.channels.create({
@@ -298,16 +269,13 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.guild.channels.create({
           name: 'Voice Call',
           type: ChannelType.GuildVoice,
-          parent: category.id,
-          permissionOverwrites
+          parent: category.id
         });
       }
 
       const welcomeChannel = interaction.guild.channels.cache.find(c => c.name === "welcome");
       if (welcomeChannel) {
-        await welcomeChannel.permissionOverwrites.edit(role.id, {
-          ViewChannel: false
-        });
+        await welcomeChannel.permissionOverwrites.edit(role.id, { ViewChannel: false });
       }
 
       try {
@@ -315,15 +283,47 @@ client.on(Events.InteractionCreate, async interaction => {
       } catch {}
 
       await interaction.message.delete().catch(() => {});
-
-      await interaction.editReply({
-        content: `✅ Approved ${member.user.username}`
-      });
+      await interaction.editReply({ content: `✅ Approved ${member.user.username}` });
     }
 
   } catch (error) {
     console.error("ERROR:", error);
   }
+});
+
+
+// =========================
+// 📢 BROADCAST SYSTEM (DM ALL USERS)
+// =========================
+client.on(Events.MessageCreate, async message => {
+
+  if (message.author.bot) return;
+  if (message.channel.name !== "broadcast") return;
+
+  if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    return message.reply("❌ Not allowed.");
+  }
+
+  const members = await message.guild.members.fetch();
+
+  let success = 0;
+  let failed = 0;
+
+  for (const member of members.values()) {
+
+    if (member.user.bot) continue;
+
+    if (!member.roles.cache.some(r => r.name !== "Pending")) continue;
+
+    try {
+      await member.send(`📢 **Announcement**\n\n${message.content}`);
+      success++;
+    } catch {
+      failed++;
+    }
+  }
+
+  message.reply(`✅ Sent: ${success} | ❌ Failed: ${failed}`);
 });
 
 client.login(process.env.TOKEN);
