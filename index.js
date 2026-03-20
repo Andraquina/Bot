@@ -69,7 +69,6 @@ function isSameCompany(a, b) {
   const wordsB = extractKeywords(b);
 
   const common = wordsA.filter(w => wordsB.includes(w));
-
   return common.length >= Math.min(wordsA.length, wordsB.length) / 2;
 }
 
@@ -293,7 +292,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
 
 // =========================
-// 📢 BROADCAST SYSTEM (DM ALL USERS)
+// 📢 FINAL BROADCAST SYSTEM (; + /)
 // =========================
 client.on(Events.MessageCreate, async message => {
 
@@ -304,6 +303,21 @@ client.on(Events.MessageCreate, async message => {
     return message.reply("❌ Not allowed.");
   }
 
+  const content = message.content.trim();
+
+  if (!content.startsWith("/")) {
+    return message.reply("❌ Use:\n`/company1;company2 / message`");
+  }
+
+  const parts = content.split("/").map(p => p.trim()).filter(p => p);
+
+  if (parts.length < 2) {
+    return message.reply("❌ Correct format:\n`/targets / message`");
+  }
+
+  const targets = parts[0].toLowerCase().split(";").map(t => t.trim());
+  const messageContent = parts.slice(1).join(" / ");
+
   const members = await message.guild.members.fetch();
 
   let success = 0;
@@ -313,10 +327,24 @@ client.on(Events.MessageCreate, async message => {
 
     if (member.user.bot) continue;
 
-    if (!member.roles.cache.some(r => r.name !== "Pending")) continue;
+    if (targets.includes("all")) {
+      try {
+        await member.send(`📢 **Announcement**\n\n${messageContent}`);
+        success++;
+      } catch {
+        failed++;
+      }
+      continue;
+    }
+
+    const match = member.roles.cache.some(role =>
+      targets.some(t => isSameCompany(role.name, t))
+    );
+
+    if (!match) continue;
 
     try {
-      await member.send(`📢 **Announcement**\n\n${message.content}`);
+      await member.send(`📢 **Company Update**\n\n${messageContent}`);
       success++;
     } catch {
       failed++;
