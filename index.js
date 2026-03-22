@@ -320,6 +320,21 @@ client.on(Events.InteractionCreate, async interaction => {
 
 const { EmbedBuilder } = require('discord.js');
 
+if (!message.guild) {
+
+  if (repliedUsers.has(message.author.id)) return;
+
+  await message.reply(
+    "📩 **Inter Molds System**\n\n" +
+    "This bot is used for notifications only.\n" +
+    "We do not receive or monitor messages sent here.\n\n" +
+    "If you need assistance, please contact us through our official channels."
+  );
+
+  repliedUsers.add(message.author.id);
+  return;
+}
+
 // =========================
 // 🚀 FINAL BOSS SYSTEM (LIVE PROGRESS)
 // =========================
@@ -482,48 +497,6 @@ client.on(Events.MessageCreate, async message => {
       await preview.edit({ content: "⏳ Broadcast expired.", components: [] });
     }
   });
-});
-
-
-// =========================
-// 📩 DM AUTO RESPONSE (SAFE VERSION)
-// =========================
-
-const repliedUsers = new Set();
-
-client.on(Events.MessageCreate, async message => {
-
-  // ignore bots
-  if (message.author.bot) return;
-
-  // =========================
-  // 📩 HANDLE DMs FIRST
-  // =========================
-  if (!message.guild) {
-
-    if (repliedUsers.has(message.author.id)) return;
-
-    try {
-      await message.reply(
-        "📩 **Inter Molds System**\n\n" +
-        "This bot is used for notifications only.\n" +
-        "We do not receive or monitor messages sent here.\n\n" +
-        "If you need assistance, please contact us through our official channels."
-      );
-
-      repliedUsers.add(message.author.id);
-
-    } catch (err) {
-      console.log("DM reply failed:", err.message);
-    }
-
-    return; // 🔥 IMPORTANT → stop here
-  }
-
-  // =========================
-  // 📢 YOUR EXISTING BROADCAST CODE BELOW
-  // =========================
-
 });
 
 client.login(process.env.TOKEN);
