@@ -298,7 +298,7 @@ client.on(Events.InteractionCreate, async interaction => {
     )
     .setFooter({
       text: "Inter Molds, Inc.",
-      iconURL: "https://i.imgur.com/AfFp7pu.png"
+      iconURL: "https://i.postimg.cc/NMBrjhC9/IMI-LOGO-BRANCO-(2).png"
     })
     .setTimestamp();
 
