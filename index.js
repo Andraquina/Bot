@@ -292,7 +292,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
 
 // =========================
-// 📢 FINAL BROADCAST SYSTEM (! + ;)
+// 🚀 ULTIMATE BROADCAST SYSTEM (PREVIEW + CONFIRM)
 // =========================
 client.on(Events.MessageCreate, async message => {
 
@@ -320,20 +320,14 @@ client.on(Events.MessageCreate, async message => {
 
   const members = await message.guild.members.fetch();
 
-  let success = 0;
-  let failed = 0;
+  const targetMembers = [];
 
   for (const member of members.values()) {
 
     if (member.user.bot) continue;
 
     if (targets.includes("all")) {
-      try {
-        await member.send(`📢 **Announcement**\n\n${messageContent}`);
-        success++;
-      } catch {
-        failed++;
-      }
+      targetMembers.push(member);
       continue;
     }
 
@@ -341,17 +335,89 @@ client.on(Events.MessageCreate, async message => {
       targets.some(t => isSameCompany(role.name, t))
     );
 
-    if (!match) continue;
-
-    try {
-      await member.send(`📢 **Company Update**\n\n${messageContent}`);
-      success++;
-    } catch {
-      failed++;
-    }
+    if (match) targetMembers.push(member);
   }
 
-  message.reply(`✅ Sent: ${success} | ❌ Failed: ${failed}`);
+  if (targetMembers.length === 0) {
+    return message.reply("❌ No users found for those targets.");
+  }
+
+  // 🔥 PREVIEW MESSAGE
+  const confirmBtn = new ButtonBuilder()
+    .setCustomId('confirm_broadcast')
+    .setLabel('Confirm')
+    .setStyle(ButtonStyle.Success);
+
+  const cancelBtn = new ButtonBuilder()
+    .setCustomId('cancel_broadcast')
+    .setLabel('Cancel')
+    .setStyle(ButtonStyle.Danger);
+
+  const row = new ActionRowBuilder().addComponents(confirmBtn, cancelBtn);
+
+  const previewMsg = await message.reply({
+    content:
+      `📢 **Broadcast Preview**\n\n` +
+      `🎯 Targets: ${targets.join(", ")}\n` +
+      `👥 Users: ${targetMembers.length}\n\n` +
+      `💬 Message:\n${messageContent}`,
+    components: [row]
+  });
+
+  // =========================
+  // 🔘 BUTTON HANDLER (TEMP)
+  // =========================
+  const filter = i =>
+    (i.customId === 'confirm_broadcast' || i.customId === 'cancel_broadcast') &&
+    i.user.id === message.author.id;
+
+  const collector = previewMsg.createMessageComponentCollector({
+    filter,
+    time: 30000
+  });
+
+  collector.on('collect', async interaction => {
+
+    if (interaction.customId === 'cancel_broadcast') {
+      await interaction.update({
+        content: "❌ Broadcast cancelled.",
+        components: []
+      });
+      collector.stop();
+      return;
+    }
+
+    if (interaction.customId === 'confirm_broadcast') {
+
+      let success = 0;
+      let failed = 0;
+
+      for (const member of targetMembers) {
+        try {
+          await member.send(`📢 **Announcement**\n\n${messageContent}`);
+          success++;
+        } catch {
+          failed++;
+        }
+      }
+
+      await interaction.update({
+        content: `✅ Sent: ${success} | ❌ Failed: ${failed}`,
+        components: []
+      });
+
+      collector.stop();
+    }
+  });
+
+  collector.on('end', async collected => {
+    if (collected.size === 0) {
+      await previewMsg.edit({
+        content: "⏳ Broadcast expired.",
+        components: []
+      });
+    }
+  });
 });
 
 client.login(process.env.TOKEN);
