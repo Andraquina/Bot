@@ -294,7 +294,7 @@ client.on(Events.InteractionCreate, async interaction => {
 const { EmbedBuilder } = require('discord.js');
 
 // =========================
-// 🚀 FINAL CLEAN SYSTEM (NO LOGS)
+// 🚀 FINAL BOSS SYSTEM (LIVE PROGRESS)
 // =========================
 client.on(Events.MessageCreate, async message => {
 
@@ -321,7 +321,6 @@ client.on(Events.MessageCreate, async message => {
   const messageContent = parts[1];
   const timeRaw = parts[2] || null;
 
-  // ⏱️ TIME
   let delay = 0;
 
   if (timeRaw) {
@@ -356,7 +355,6 @@ client.on(Events.MessageCreate, async message => {
 
   const files = message.attachments.map(att => att.url);
 
-  // 🔍 PREVIEW
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('confirm').setLabel('Confirm').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger)
@@ -385,7 +383,7 @@ client.on(Events.MessageCreate, async message => {
     if (interaction.customId === 'confirm') {
 
       await interaction.update({
-        content: delay ? `⏳ Scheduled in ${timeRaw}` : "🚀 Sending...",
+        content: delay ? `⏳ Scheduled in ${timeRaw}` : "🚀 Preparing...",
         components: []
       });
 
@@ -393,10 +391,19 @@ client.on(Events.MessageCreate, async message => {
 
         let success = 0;
         let failed = 0;
+        const total = targetMembers.length;
 
-        for (const member of targetMembers) {
+        // 🔥 INITIAL MESSAGE
+        await preview.edit({
+          content: `🚀 Sending... (0/${total})`,
+          components: []
+        });
+
+        for (let i = 0; i < total; i++) {
+
+          const member = targetMembers[i];
+
           try {
-
             const embed = new EmbedBuilder()
               .setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db)
               .setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update")
@@ -417,16 +424,25 @@ client.on(Events.MessageCreate, async message => {
           } catch {
             failed++;
           }
+
+          // ⚡ UPDATE EVERY 5 USERS (SMOOTH)
+          if (i % 5 === 0 || i === total - 1) {
+            await preview.edit({
+              content: `🚀 Sending... (${i + 1}/${total})`
+            });
+          }
         }
 
-        // ✅ FINAL REPORT
-        await message.channel.send(
-          `✅ **Broadcast Completed**\n\n` +
-          `🎯 Targets: ${targets.join(", ")}\n` +
-          `👥 Sent: ${success}\n` +
-          `❌ Failed: ${failed}\n\n` +
-          `💬 ${messageContent}`
-        );
+        // ✅ FINAL RESULT
+        await preview.edit({
+          content:
+            `✅ **Broadcast Completed**\n\n` +
+            `🎯 Targets: ${targets.join(", ")}\n` +
+            `👥 Sent: ${success}\n` +
+            `❌ Failed: ${failed}\n\n` +
+            `💬 ${messageContent}`,
+          components: []
+        });
 
       }, delay);
 
