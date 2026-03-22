@@ -484,4 +484,40 @@ client.on(Events.MessageCreate, async message => {
   });
 });
 
+
+// =========================
+// 📩 DM AUTO RESPONSE (PRO VERSION)
+// =========================
+
+// store users who already got a reply (prevents spam)
+const repliedUsers = new Set();
+
+client.on(Events.MessageCreate, async message => {
+
+  // ignore bots
+  if (message.author.bot) return;
+
+  // only DMs (no server)
+  if (!message.guild) {
+
+    // prevent spam replies (only reply once per session)
+    if (repliedUsers.has(message.author.id)) return;
+
+    try {
+      await message.reply(
+        "📩 **Inter Molds System**\n\n" +
+        "This bot is used for notifications only.\n" +
+        "We do not receive or monitor messages sent here.\n\n" +
+        "If you need assistance, please contact us through our official channels."
+      );
+
+      // mark user as replied
+      repliedUsers.add(message.author.id);
+
+    } catch (err) {
+      console.log("DM reply failed:", err.message);
+    }
+  }
+});
+
 client.login(process.env.TOKEN);
