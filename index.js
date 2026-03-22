@@ -294,7 +294,7 @@ client.on(Events.InteractionCreate, async interaction => {
 const { EmbedBuilder } = require('discord.js');
 
 // =========================
-// 🚀 NEXT LEVEL SYSTEM (SCHEDULE + ATTACH + LOGS)
+// 🚀 FINAL CLEAN SYSTEM (NO LOGS)
 // =========================
 client.on(Events.MessageCreate, async message => {
 
@@ -321,7 +321,7 @@ client.on(Events.MessageCreate, async message => {
   const messageContent = parts[1];
   const timeRaw = parts[2] || null;
 
-  // ⏱️ PARSE TIME
+  // ⏱️ TIME
   let delay = 0;
 
   if (timeRaw) {
@@ -364,7 +364,7 @@ client.on(Events.MessageCreate, async message => {
 
   const preview = await message.reply({
     content:
-      `📢 **Preview**\n\n` +
+      `📢 **Broadcast Preview**\n\n` +
       `🎯 Targets: ${targets.join(", ")}\n` +
       `👥 Users: ${targetMembers.length}\n` +
       `⏱️ Delay: ${timeRaw || "none"}\n\n` +
@@ -373,20 +373,19 @@ client.on(Events.MessageCreate, async message => {
   });
 
   const filter = i => i.user.id === message.author.id;
-
   const collector = preview.createMessageComponentCollector({ filter, time: 30000 });
 
   collector.on('collect', async interaction => {
 
     if (interaction.customId === 'cancel') {
-      await interaction.update({ content: "❌ Cancelled.", components: [] });
+      await interaction.update({ content: "❌ Broadcast cancelled.", components: [] });
       return collector.stop();
     }
 
     if (interaction.customId === 'confirm') {
 
       await interaction.update({
-        content: delay ? `⏳ Scheduled in ${timeRaw}` : "🚀 Sending now...",
+        content: delay ? `⏳ Scheduled in ${timeRaw}` : "🚀 Sending...",
         components: []
       });
 
@@ -420,19 +419,14 @@ client.on(Events.MessageCreate, async message => {
           }
         }
 
-        // 🧾 LOG
-        const logChannel = message.guild.channels.cache.find(c => c.name === "logs");
-
-        if (logChannel) {
-          await logChannel.send(
-            `📢 Broadcast Log\n` +
-            `👤 Admin: ${message.author.tag}\n` +
-            `🎯 Targets: ${targets.join(", ")}\n` +
-            `👥 Sent: ${success}\n` +
-            `❌ Failed: ${failed}\n\n` +
-            `💬 ${messageContent}`
-          );
-        }
+        // ✅ FINAL REPORT
+        await message.channel.send(
+          `✅ **Broadcast Completed**\n\n` +
+          `🎯 Targets: ${targets.join(", ")}\n` +
+          `👥 Sent: ${success}\n` +
+          `❌ Failed: ${failed}\n\n` +
+          `💬 ${messageContent}`
+        );
 
       }, delay);
 
@@ -442,8 +436,9 @@ client.on(Events.MessageCreate, async message => {
 
   collector.on('end', async collected => {
     if (collected.size === 0) {
-      await preview.edit({ content: "⏳ Expired.", components: [] });
+      await preview.edit({ content: "⏳ Broadcast expired.", components: [] });
     }
   });
 });
+
 client.login(process.env.TOKEN);
