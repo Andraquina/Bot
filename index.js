@@ -486,10 +486,9 @@ client.on(Events.MessageCreate, async message => {
 
 
 // =========================
-// 📩 DM AUTO RESPONSE (PRO VERSION)
+// 📩 DM AUTO RESPONSE (SAFE VERSION)
 // =========================
 
-// store users who already got a reply (prevents spam)
 const repliedUsers = new Set();
 
 client.on(Events.MessageCreate, async message => {
@@ -497,10 +496,11 @@ client.on(Events.MessageCreate, async message => {
   // ignore bots
   if (message.author.bot) return;
 
-  // only DMs (no server)
+  // =========================
+  // 📩 HANDLE DMs FIRST
+  // =========================
   if (!message.guild) {
 
-    // prevent spam replies (only reply once per session)
     if (repliedUsers.has(message.author.id)) return;
 
     try {
@@ -511,13 +511,19 @@ client.on(Events.MessageCreate, async message => {
         "If you need assistance, please contact us through our official channels."
       );
 
-      // mark user as replied
       repliedUsers.add(message.author.id);
 
     } catch (err) {
       console.log("DM reply failed:", err.message);
     }
+
+    return; // 🔥 IMPORTANT → stop here
   }
+
+  // =========================
+  // 📢 YOUR EXISTING BROADCAST CODE BELOW
+  // =========================
+
 });
 
 client.login(process.env.TOKEN);
