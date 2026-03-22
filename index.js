@@ -291,11 +291,11 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 
-// =========================
-// 🚀 ULTIMATE BROADCAST SYSTEM (EMBED + PREVIEW + CONFIRM)
-// =========================
 const { EmbedBuilder } = require('discord.js');
 
+// =========================
+// 🚀 NEXT LEVEL SYSTEM (SCHEDULE + ATTACH + LOGS)
+// =========================
 client.on(Events.MessageCreate, async message => {
 
   if (message.author.bot) return;
@@ -305,23 +305,33 @@ client.on(Events.MessageCreate, async message => {
     return message.reply("❌ Not allowed.");
   }
 
-  const content = message.content.trim();
+  const raw = message.content.trim();
 
-  if (!content.startsWith("!")) {
-    return message.reply("❌ Use:\n`!company1;company2 ! message`");
+  if (!raw.startsWith("!")) {
+    return message.reply("❌ Use:\n`!targets ! message ! time(optional)`");
   }
 
-  const parts = content.split("!").map(p => p.trim()).filter(p => p);
+  const parts = raw.split("!").map(p => p.trim()).filter(p => p);
 
   if (parts.length < 2) {
-    return message.reply("❌ Correct format:\n`!targets ! message`");
+    return message.reply("❌ Format:\n`!targets ! message ! time(optional)`");
   }
 
   const targets = parts[0].toLowerCase().split(";").map(t => t.trim());
-  const messageContent = parts.slice(1).join(" ! ");
+  const messageContent = parts[1];
+  const timeRaw = parts[2] || null;
+
+  // ⏱️ PARSE TIME
+  let delay = 0;
+
+  if (timeRaw) {
+    const num = parseInt(timeRaw);
+    if (timeRaw.includes("m")) delay = num * 60000;
+    else if (timeRaw.includes("h")) delay = num * 3600000;
+    else if (timeRaw.includes("d")) delay = num * 86400000;
+  }
 
   const members = await message.guild.members.fetch();
-
   const targetMembers = [];
 
   for (const member of members.values()) {
@@ -341,88 +351,90 @@ client.on(Events.MessageCreate, async message => {
   }
 
   if (targetMembers.length === 0) {
-    return message.reply("❌ No users found for those targets.");
+    return message.reply("❌ No users found.");
   }
 
-  // =========================
+  const files = message.attachments.map(att => att.url);
+
   // 🔍 PREVIEW
-  // =========================
-  const confirmBtn = new ButtonBuilder()
-    .setCustomId('confirm_broadcast')
-    .setLabel('Confirm')
-    .setStyle(ButtonStyle.Success);
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('confirm').setLabel('Confirm').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger)
+  );
 
-  const cancelBtn = new ButtonBuilder()
-    .setCustomId('cancel_broadcast')
-    .setLabel('Cancel')
-    .setStyle(ButtonStyle.Danger);
-
-  const row = new ActionRowBuilder().addComponents(confirmBtn, cancelBtn);
-
-  const previewMsg = await message.reply({
+  const preview = await message.reply({
     content:
-      `📢 **Broadcast Preview**\n\n` +
+      `📢 **Preview**\n\n` +
       `🎯 Targets: ${targets.join(", ")}\n` +
-      `👥 Users: ${targetMembers.length}\n\n` +
-      `💬 Message:\n${messageContent}`,
+      `👥 Users: ${targetMembers.length}\n` +
+      `⏱️ Delay: ${timeRaw || "none"}\n\n` +
+      `💬 ${messageContent}`,
     components: [row]
   });
 
-  // =========================
-  // 🔘 BUTTON HANDLER
-  // =========================
-  const filter = i =>
-    (i.customId === 'confirm_broadcast' || i.customId === 'cancel_broadcast') &&
-    i.user.id === message.author.id;
+  const filter = i => i.user.id === message.author.id;
 
-  const collector = previewMsg.createMessageComponentCollector({
-    filter,
-    time: 30000
-  });
+  const collector = preview.createMessageComponentCollector({ filter, time: 30000 });
 
   collector.on('collect', async interaction => {
 
-    if (interaction.customId === 'cancel_broadcast') {
-      await interaction.update({
-        content: "❌ Broadcast cancelled.",
-        components: []
-      });
-      collector.stop();
-      return;
+    if (interaction.customId === 'cancel') {
+      await interaction.update({ content: "❌ Cancelled.", components: [] });
+      return collector.stop();
     }
 
-    if (interaction.customId === 'confirm_broadcast') {
-
-      let success = 0;
-      let failed = 0;
-
-      for (const member of targetMembers) {
-        try {
-
-          // 🎨 EMBED MESSAGE
-          const embed = new EmbedBuilder()
-            .setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db) // green = global, blue = company
-            .setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update")
-            .setDescription(messageContent)
-            .setFooter({
-              text: "Inter Molds, Inc.",
-              iconURL: "https://image.pitchbook.com/bCxcu5izk9sdndXf787YWVFTzmb1703134045865_200x200" // 🔥 replace with your logo if you want
-            })
-            .setTimestamp();
-
-          await member.send({ embeds: [embed] });
-
-          success++;
-
-        } catch {
-          failed++;
-        }
-      }
+    if (interaction.customId === 'confirm') {
 
       await interaction.update({
-        content: `✅ Sent: ${success} | ❌ Failed: ${failed}`,
+        content: delay ? `⏳ Scheduled in ${timeRaw}` : "🚀 Sending now...",
         components: []
       });
+
+      setTimeout(async () => {
+
+        let success = 0;
+        let failed = 0;
+
+        for (const member of targetMembers) {
+          try {
+
+            const embed = new EmbedBuilder()
+              .setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db)
+              .setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update")
+              .setDescription(messageContent)
+              .setFooter({
+                text: "Inter Molds, Inc.",
+                iconURL: "https://i.imgur.com/AfFp7pu.png"
+              })
+              .setTimestamp();
+
+            await member.send({
+              embeds: [embed],
+              files: files
+            });
+
+            success++;
+
+          } catch {
+            failed++;
+          }
+        }
+
+        // 🧾 LOG
+        const logChannel = message.guild.channels.cache.find(c => c.name === "logs");
+
+        if (logChannel) {
+          await logChannel.send(
+            `📢 Broadcast Log\n` +
+            `👤 Admin: ${message.author.tag}\n` +
+            `🎯 Targets: ${targets.join(", ")}\n` +
+            `👥 Sent: ${success}\n` +
+            `❌ Failed: ${failed}\n\n` +
+            `💬 ${messageContent}`
+          );
+        }
+
+      }, delay);
 
       collector.stop();
     }
@@ -430,12 +442,8 @@ client.on(Events.MessageCreate, async message => {
 
   collector.on('end', async collected => {
     if (collected.size === 0) {
-      await previewMsg.edit({
-        content: "⏳ Broadcast expired.",
-        components: []
-      });
+      await preview.edit({ content: "⏳ Expired.", components: [] });
     }
   });
 });
-
 client.login(process.env.TOKEN);
