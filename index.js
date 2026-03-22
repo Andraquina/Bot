@@ -292,8 +292,10 @@ client.on(Events.InteractionCreate, async interaction => {
 
 
 // =========================
-// 🚀 ULTIMATE BROADCAST SYSTEM (PREVIEW + CONFIRM)
+// 🚀 ULTIMATE BROADCAST SYSTEM (EMBED + PREVIEW + CONFIRM)
 // =========================
+const { EmbedBuilder } = require('discord.js');
+
 client.on(Events.MessageCreate, async message => {
 
   if (message.author.bot) return;
@@ -342,7 +344,9 @@ client.on(Events.MessageCreate, async message => {
     return message.reply("❌ No users found for those targets.");
   }
 
-  // 🔥 PREVIEW MESSAGE
+  // =========================
+  // 🔍 PREVIEW
+  // =========================
   const confirmBtn = new ButtonBuilder()
     .setCustomId('confirm_broadcast')
     .setLabel('Confirm')
@@ -365,7 +369,7 @@ client.on(Events.MessageCreate, async message => {
   });
 
   // =========================
-  // 🔘 BUTTON HANDLER (TEMP)
+  // 🔘 BUTTON HANDLER
   // =========================
   const filter = i =>
     (i.customId === 'confirm_broadcast' || i.customId === 'cancel_broadcast') &&
@@ -394,8 +398,22 @@ client.on(Events.MessageCreate, async message => {
 
       for (const member of targetMembers) {
         try {
-          await member.send(`📢 **Announcement**\n\n${messageContent}`);
+
+          // 🎨 EMBED MESSAGE
+          const embed = new EmbedBuilder()
+            .setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db) // green = global, blue = company
+            .setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update")
+            .setDescription(messageContent)
+            .setFooter({
+              text: "Inter Molds, Inc.",
+              iconURL: "https://i.imgur.com/AfFp7pu.png" // 🔥 replace with your logo if you want
+            })
+            .setTimestamp();
+
+          await member.send({ embeds: [embed] });
+
           success++;
+
         } catch {
           failed++;
         }
