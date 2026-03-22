@@ -406,7 +406,7 @@ client.on(Events.MessageCreate, async message => {
             .setDescription(messageContent)
             .setFooter({
               text: "Inter Molds, Inc.",
-              iconURL: "https://i.imgur.com/AfFp7pu.png" // 🔥 replace with your logo if you want
+              iconURL: "https://drive.google.com/file/d/1xBDNNmBEJW6M39f9ugDTS6ZNxnZdSECj/view?usp=sharing" // 🔥 replace with your logo if you want
             })
             .setTimestamp();
 
