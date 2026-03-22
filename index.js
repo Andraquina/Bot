@@ -278,8 +278,35 @@ client.on(Events.InteractionCreate, async interaction => {
       }
 
       try {
-        await member.send(`✅ You’ve been approved! Welcome to **Inter Molds, Inc.** 🎉`);
-      } catch {}
+  const { EmbedBuilder } = require('discord.js');
+
+  // ✅ APPROVAL MESSAGE
+  await member.send(`✅ You’ve been approved! Welcome to **Inter Molds, Inc.** 🎉`);
+
+  // 📜 RULES EMBED
+  const rulesEmbed = new EmbedBuilder()
+    .setColor(0xf1c40f) // gold
+    .setTitle("📜 Company Rules")
+    .setDescription(
+      `━━━━━━━━━━━━━━━\n` +
+      `1. Be respectful\n` +
+      `2. No spam\n` +
+      `3. Follow all guidelines\n` +
+      `4. Keep discussions professional\n` +
+      `5. Respect privacy\n` +
+      `━━━━━━━━━━━━━━━`
+    )
+    .setFooter({
+      text: "Inter Molds, Inc.",
+      iconURL: "https://i.imgur.com/AfFp7pu.png"
+    })
+    .setTimestamp();
+
+  await member.send({ embeds: [rulesEmbed] });
+
+} catch (err) {
+  console.log("DM failed:", err.message);
+}
 
       await interaction.message.delete().catch(() => {});
       await interaction.editReply({ content: `✅ Approved ${member.user.username}` });
