@@ -318,22 +318,39 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 
-const { EmbedBuilder } = require('discord.js');
+// =========================
+// 📩 DM AUTO RESPONSE (FIXED)
+// =========================
 
-if (!message.guild) {
+const repliedUsers = new Set();
 
-  if (repliedUsers.has(message.author.id)) return;
+client.on(Events.MessageCreate, async (message) => {
 
-  await message.reply(
-    "📩 **Inter Molds System**\n\n" +
-    "This bot is used for notifications only.\n" +
-    "We do not receive or monitor messages sent here.\n\n" +
-    "If you need assistance, please contact us through our official channels."
-  );
+  if (message.author.bot) return;
 
-  repliedUsers.add(message.author.id);
-  return;
-}
+  // DM only
+  if (!message.guild) {
+
+    if (repliedUsers.has(message.author.id)) return;
+
+    try {
+      await message.reply(
+        "📩 **Inter Molds System**\n\n" +
+        "This bot is used for notifications only.\n" +
+        "We do not receive or monitor messages sent here.\n\n" +
+        "If you need assistance, please contact us through our official channels."
+      );
+
+      repliedUsers.add(message.author.id);
+
+    } catch (err) {
+      console.log("DM reply failed:", err.message);
+    }
+
+    return;
+  }
+
+});
 
 // =========================
 // 🚀 FINAL BOSS SYSTEM (LIVE PROGRESS)
