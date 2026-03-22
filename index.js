@@ -410,7 +410,7 @@ client.on(Events.MessageCreate, async message => {
               .setDescription(messageContent)
               .setFooter({
                 text: "Inter Molds, Inc.",
-                iconURL: "https://i.postimg.cc/m2NJP7r7/IMI_ORIGINAL.jpg"
+                iconURL: "https://i.postimg.cc/NMBrjhC9/IMI-LOGO-BRANCO-(2).png"
               })
               .setTimestamp();
 
