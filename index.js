@@ -129,32 +129,50 @@ client.on(Events.InteractionCreate, async interaction => {
   try {
 
     // =========================
-    // 🔍 AUTOCOMPLETE (FIXED)
+    // 🔍 PRO AUTOCOMPLETE
     // =========================
     if (interaction.isAutocomplete()) {
       try {
         const focused = interaction.options.getFocused() || "";
 
+        const parts = focused.split(";");
+        const current = parts[parts.length - 1].trim().toLowerCase();
+
         const roles = interaction.guild.roles.cache
           .filter(r => r.name !== "@everyone")
           .map(r => r.name);
 
-        const filtered = roles
-          .filter(name =>
-            name.toLowerCase().includes(focused.toLowerCase())
-          )
-          .slice(0, 25);
+        // 🔥 ranking
+        const starts = roles.filter(r => r.toLowerCase().startsWith(current));
+        const includes = roles.filter(r => r.toLowerCase().includes(current) && !starts.includes(r));
 
-        await interaction.respond(
-          filtered.map(name => ({ name, value: name }))
-        );
+        let results = [...starts, ...includes];
+
+        // 🔥 remove duplicates already selected
+        const selected = parts.slice(0, -1).map(p => p.trim().toLowerCase());
+        results = results.filter(r => !selected.includes(r.toLowerCase()));
+
+        // 🔥 always include ALL
+        if (!selected.includes("all")) {
+          results.unshift("ALL");
+        }
+
+        results = results.slice(0, 25);
+
+        const suggestions = results.map(name => {
+          const newParts = [...parts];
+          newParts[newParts.length - 1] = name;
+          return {
+            name: newParts.join("; "),
+            value: newParts.join("; ")
+          };
+        });
+
+        await interaction.respond(suggestions);
 
       } catch (err) {
         console.error("AUTOCOMPLETE ERROR:", err);
-
-        try {
-          await interaction.respond([]);
-        } catch {}
+        try { await interaction.respond([]); } catch {}
       }
 
       return;
