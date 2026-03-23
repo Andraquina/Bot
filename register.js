@@ -5,7 +5,7 @@ const commands = [
     .setName('broadcast')
     .setDescription('Send a broadcast message')
     .addStringOption(option =>
-  option.setName('targets')
+      option.setName('targets')
     .setDescription('Select company or type')
     .setRequired(true)
     .setAutocomplete(true) // 🔥 THIS LINE
