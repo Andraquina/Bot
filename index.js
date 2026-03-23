@@ -16,7 +16,10 @@ const {
 } = require('discord.js');
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers // 🔥 IMPORTANT
+  ]
 });
 
 const session = new Map();
@@ -35,15 +38,19 @@ client.once(Events.ClientReady, async (client) => {
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
-  await rest.put(
-    Routes.applicationGuildCommands(
-      process.env.CLIENT_ID,
-      process.env.GUILD_ID
-    ),
-    { body: commands }
-  );
+  try {
+    await rest.put(
+      Routes.applicationGuildCommands(
+        process.env.CLIENT_ID,
+        process.env.GUILD_ID
+      ),
+      { body: commands }
+    );
 
-  console.log("✅ Command registered");
+    console.log("✅ Command registered");
+  } catch (err) {
+    console.error("❌ Register error:", err);
+  }
 });
 
 // =========================
@@ -73,10 +80,19 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const rolesData = await interaction.guild.roles.fetch();
 
+      console.log("ROLES:", rolesData.size); // 🔍 debug
+
       const roles = rolesData
-        .filter(r => r.name !== "@everyone")
+        .filter(r => r.name !== "@everyone" && !r.managed)
         .map(r => r.name)
         .slice(0, 25);
+
+      if (roles.length === 0) {
+        return interaction.reply({
+          content: "❌ No roles found. Check bot permissions/intents.",
+          ephemeral: true
+        });
+      }
 
       const select = new StringSelectMenuBuilder()
         .setCustomId("select_companies")
@@ -167,6 +183,13 @@ client.on(Events.InteractionCreate, async interaction => {
         }
       }
 
+      if (targetMembers.length === 0) {
+        return interaction.reply({
+          content: "❌ No users found.",
+          ephemeral: true
+        });
+      }
+
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
@@ -193,7 +216,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // ✅ CONFIRM
+    // ✅ CONFIRM / CANCEL
     // =========================
     if (interaction.isButton()) {
 
@@ -226,7 +249,8 @@ client.on(Events.InteractionCreate, async interaction => {
                 .setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db)
                 .setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update")
                 .setDescription(messageContent)
-                .setFooter({ text: "Inter Molds, Inc." });
+                .setFooter({ text: "Inter Molds, Inc." })
+                .setTimestamp();
 
               await member.send({ embeds: [embed] });
               success++;
@@ -238,7 +262,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
           await interaction.followUp({
             content:
-              `✅ Done\n` +
+              `✅ **Completed**\n\n` +
               `👥 Sent: ${success}\n` +
               `❌ Failed: ${failed}`
           });
