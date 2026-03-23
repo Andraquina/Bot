@@ -38,19 +38,15 @@ client.once(Events.ClientReady, async (client) => {
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
-  try {
-    await rest.put(
-      Routes.applicationGuildCommands(
-        process.env.CLIENT_ID,
-        process.env.GUILD_ID
-      ),
-      { body: commands }
-    );
+  await rest.put(
+    Routes.applicationGuildCommands(
+      process.env.CLIENT_ID,
+      process.env.GUILD_ID
+    ),
+    { body: commands }
+  );
 
-    console.log("✅ Command registered");
-  } catch (err) {
-    console.error("❌ Register error:", err);
-  }
+  console.log("✅ Command registered");
 });
 
 // =========================
@@ -74,25 +70,20 @@ client.on(Events.InteractionCreate, async interaction => {
   try {
 
     // =========================
-    // 🚀 START COMMAND
+    // 🚀 START
     // =========================
     if (interaction.isChatInputCommand() && interaction.commandName === "broadcast") {
 
-      // 🔥 FORCE CACHE LOAD
-      await interaction.guild.roles.fetch();
+      await interaction.guild.roles.fetch(); // ensure cache
 
-      const rolesData = interaction.guild.roles.cache;
-
-      console.log("ROLES CACHE:", rolesData.size);
-
-      const roles = rolesData
+      const roles = interaction.guild.roles.cache
         .filter(r => r.name !== "@everyone" && !r.managed)
         .map(r => r.name)
         .slice(0, 25);
 
       if (roles.length === 0) {
         return interaction.reply({
-          content: "❌ No roles found. Bot may lack permissions or roles are still loading.",
+          content: "❌ No roles found.",
           ephemeral: true
         });
       }
@@ -117,7 +108,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // 📌 DROPDOWN
+    // 📌 DROPDOWN → INSTANT MODAL
     // =========================
     if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
 
@@ -127,7 +118,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const modal = new ModalBuilder()
         .setCustomId("broadcast_modal")
-        .setTitle("Broadcast");
+        .setTitle("Broadcast Message");
 
       const messageInput = new TextInputBuilder()
         .setCustomId("message")
@@ -145,7 +136,10 @@ client.on(Events.InteractionCreate, async interaction => {
         new ActionRowBuilder().addComponents(delayInput)
       );
 
+      // 🔥 KEY UX FIX
+      await interaction.deferUpdate();
       await interaction.showModal(modal);
+
       return;
     }
 
@@ -202,7 +196,8 @@ client.on(Events.InteractionCreate, async interaction => {
         content:
           `📢 **Preview**\n\n` +
           `🎯 ${targets.join(", ")}\n` +
-          `👥 ${targetMembers.length} users\n\n` +
+          `👥 ${targetMembers.length} users\n` +
+          `⏱️ ${timeRaw || "no delay"}\n\n` +
           `💬 ${messageContent}`,
         components: [row],
         ephemeral: true
@@ -236,7 +231,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const { targetMembers, messageContent, delay, targets } = data;
 
         await interaction.update({
-          content: "🚀 Sending...",
+          content: delay ? `⏳ Scheduled...` : "🚀 Sending...",
           components: []
         });
 
