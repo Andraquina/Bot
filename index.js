@@ -116,8 +116,12 @@ client.on(Events.InteractionCreate, async interaction => {
     // =========================
     if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
 
+      if (interaction.replied || interaction.deferred) return;
+
+      const data = session.get(interaction.user.id) || {};
+
       session.set(interaction.user.id, {
-        ...session.get(interaction.user.id),
+        ...data,
         targets: interaction.values
       });
 
@@ -149,6 +153,8 @@ client.on(Events.InteractionCreate, async interaction => {
     // 📝 MODAL → PREVIEW
     // =========================
     if (interaction.isModalSubmit() && interaction.customId === "broadcast_modal") {
+
+      if (interaction.replied || interaction.deferred) return;
 
       const data = session.get(interaction.user.id);
       if (!data) return;
@@ -197,8 +203,7 @@ client.on(Events.InteractionCreate, async interaction => {
         targetMembers
       });
 
-      await interaction.deferUpdate(); // acknowledge modal
-
+      await interaction.deferUpdate();
       return;
     }
 
@@ -213,13 +218,21 @@ client.on(Events.InteractionCreate, async interaction => {
       // ❌ CANCEL
       if (interaction.customId === "cancel") {
         session.delete(interaction.user.id);
-        return interaction.update({ content: "❌ Cancelled.", components: [] });
+        return interaction.update({
+          content: "❌ Cancelled.",
+          components: []
+        });
       }
 
-      // ⬅ BACK
+      // ⬅ BACK (FIXED)
       if (interaction.customId === "back") {
 
         const dropdown = await buildDropdown(interaction.guild, data.targets);
+
+        // 🔥 RESET SESSION PROPERLY
+        session.set(interaction.user.id, {
+          message: data.message
+        });
 
         return interaction.update({
           content: "🎯 Select companies:",
