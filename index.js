@@ -97,13 +97,17 @@ client.on(Events.InteractionCreate, async interaction => {
     // =========================
     if (interaction.isChatInputCommand() && interaction.commandName === "broadcast") {
 
-      const dropdown = await buildDropdown(interaction.guild);
-
       await interaction.deferReply({ ephemeral: true });
 
-      await interaction.editReply({
+      const dropdown = await buildDropdown(interaction.guild);
+
+      const msg = await interaction.editReply({
         content: "🎯 Select companies:",
         components: [new ActionRowBuilder().addComponents(dropdown)]
+      });
+
+      session.set(interaction.user.id, {
+        originalMessage: msg
       });
 
       return;
@@ -116,7 +120,10 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (interaction.replied || interaction.deferred) return;
 
+      const data = session.get(interaction.user.id) || {};
+
       session.set(interaction.user.id, {
+        ...data,
         targets: interaction.values
       });
 
@@ -152,6 +159,11 @@ client.on(Events.InteractionCreate, async interaction => {
       const data = session.get(interaction.user.id);
       if (!data) return;
 
+      // 🔥 DELETE OLD MESSAGE
+      if (data.originalMessage) {
+        try { await data.originalMessage.delete(); } catch {}
+      }
+
       const messageContent = interaction.fields.getTextInputValue("message");
       const timeRaw = interaction.fields.getTextInputValue("delay");
 
@@ -179,16 +191,15 @@ client.on(Events.InteractionCreate, async interaction => {
         new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
       );
 
-      await interaction.deferReply({ ephemeral: true });
-
-      await interaction.editReply({
+      await interaction.reply({
         content:
           `📢 **Preview**\n\n` +
           `🎯 ${targets.join(", ")}\n` +
           `👥 ${targetMembers.size} users\n` +
           `⏱️ ${timeRaw || "no delay"}\n\n` +
           `💬 ${messageContent}`,
-        components: [buttons]
+        components: [buttons],
+        ephemeral: true
       });
 
       session.set(interaction.user.id, {
