@@ -97,17 +97,15 @@ client.on(Events.InteractionCreate, async interaction => {
     // =========================
     if (interaction.isChatInputCommand() && interaction.commandName === "broadcast") {
 
-      await interaction.deferReply({ ephemeral: true });
-
       const dropdown = await buildDropdown(interaction.guild);
 
-      const msg = await interaction.editReply({
+      const msg = await interaction.reply({
         content: "🎯 Select companies:",
         components: [new ActionRowBuilder().addComponents(dropdown)]
       });
 
       session.set(interaction.user.id, {
-        originalMessage: msg
+        message: msg
       });
 
       return;
@@ -118,12 +116,8 @@ client.on(Events.InteractionCreate, async interaction => {
     // =========================
     if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
 
-      if (interaction.replied || interaction.deferred) return;
-
-      const data = session.get(interaction.user.id) || {};
-
       session.set(interaction.user.id, {
-        ...data,
+        ...session.get(interaction.user.id),
         targets: interaction.values
       });
 
@@ -159,11 +153,6 @@ client.on(Events.InteractionCreate, async interaction => {
       const data = session.get(interaction.user.id);
       if (!data) return;
 
-      // 🔥 DELETE OLD MESSAGE
-      if (data.originalMessage) {
-        try { await data.originalMessage.delete(); } catch {}
-      }
-
       const messageContent = interaction.fields.getTextInputValue("message");
       const timeRaw = interaction.fields.getTextInputValue("delay");
 
@@ -191,15 +180,14 @@ client.on(Events.InteractionCreate, async interaction => {
         new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
       );
 
-      await interaction.reply({
+      await data.message.edit({
         content:
           `📢 **Preview**\n\n` +
           `🎯 ${targets.join(", ")}\n` +
           `👥 ${targetMembers.size} users\n` +
           `⏱️ ${timeRaw || "no delay"}\n\n` +
           `💬 ${messageContent}`,
-        components: [buttons],
-        ephemeral: true
+        components: [buttons]
       });
 
       session.set(interaction.user.id, {
@@ -208,6 +196,8 @@ client.on(Events.InteractionCreate, async interaction => {
         delay,
         targetMembers
       });
+
+      await interaction.deferUpdate(); // acknowledge modal
 
       return;
     }
@@ -272,9 +262,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
           await interaction.followUp({
             content:
-              `✅ **Completed**\n\n` +
-              `👥 Sent: ${success}\n` +
-              `❌ Failed: ${failed}`
+              `✅ Completed\nSent: ${success}\nFailed: ${failed}`
           });
 
         }, delay);
