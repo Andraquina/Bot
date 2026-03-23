@@ -27,7 +27,7 @@ const session = new Map();
 // =========================
 // 🚀 REGISTER COMMAND
 // =========================
-client.once(Events.ClientReady, async (client) => {
+client.once(Events.ClientReady, async () => {
   console.log('🔥 BOT READY');
 
   const commands = [
@@ -70,21 +70,19 @@ async function buildDropdown(guild, selected = []) {
     .map(r => r.name)
     .slice(0, 25);
 
-  const options = [
-    { label: "ALL", value: "all", default: selected.includes("all") },
-    ...roles.map(r => ({
-      label: r,
-      value: r,
-      default: selected.includes(r)
-    }))
-  ];
-
   return new StringSelectMenuBuilder()
     .setCustomId("select_companies")
     .setPlaceholder("Select companies")
     .setMinValues(1)
-    .setMaxValues(Math.min(options.length, 25))
-    .addOptions(options);
+    .setMaxValues(Math.min(roles.length + 1, 25))
+    .addOptions([
+      { label: "ALL", value: "all", default: selected.includes("all") },
+      ...roles.map(r => ({
+        label: r,
+        value: r,
+        default: selected.includes(r)
+      }))
+    ]);
 }
 
 // =========================
@@ -101,10 +99,11 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const dropdown = await buildDropdown(interaction.guild);
 
-      await interaction.reply({
+      await interaction.deferReply({ ephemeral: true });
+
+      await interaction.editReply({
         content: "🎯 Select companies:",
-        components: [new ActionRowBuilder().addComponents(dropdown)],
-        ephemeral: true
+        components: [new ActionRowBuilder().addComponents(dropdown)]
       });
 
       return;
@@ -180,15 +179,16 @@ client.on(Events.InteractionCreate, async interaction => {
         new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
       );
 
-      await interaction.reply({
+      await interaction.deferReply({ ephemeral: true });
+
+      await interaction.editReply({
         content:
           `📢 **Preview**\n\n` +
           `🎯 ${targets.join(", ")}\n` +
           `👥 ${targetMembers.size} users\n` +
           `⏱️ ${timeRaw || "no delay"}\n\n` +
           `💬 ${messageContent}`,
-        components: [buttons],
-        ephemeral: true
+        components: [buttons]
       });
 
       session.set(interaction.user.id, {
@@ -215,7 +215,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
 
-      // ⬅ BACK (SMART)
+      // ⬅ BACK
       if (interaction.customId === "back") {
 
         const dropdown = await buildDropdown(interaction.guild, data.targets);
