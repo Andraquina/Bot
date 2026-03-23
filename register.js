@@ -5,9 +5,10 @@ const commands = [
     .setName('broadcast')
     .setDescription('Send a broadcast message')
     .addStringOption(option =>
-      option.setName('targets')
-        .setDescription('e.g. imi;microsoft or all')
-        .setRequired(true))
+  option.setName('targets')
+    .setDescription('Select company or type')
+    .setRequired(true)
+    .setAutocomplete(true) // 🔥 THIS LINE
     .addStringOption(option =>
       option.setName('message')
         .setDescription('Message to send')
