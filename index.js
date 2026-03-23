@@ -2,8 +2,6 @@ const {
   Client,
   GatewayIntentBits,
   ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   StringSelectMenuBuilder,
   ModalBuilder,
   TextInputBuilder,
@@ -43,7 +41,6 @@ function isSameCompany(a, b) {
   return na.includes(nb) || nb.includes(na);
 }
 
-// store selections
 const userSelections = new Map();
 
 // =========================
@@ -63,10 +60,15 @@ client.on(Events.InteractionCreate, async interaction => {
         return interaction.editReply("❌ Not allowed.");
       }
 
-      const roles = interaction.guild.roles.cache
+      // 🔥 FIX: fetch roles instead of cache
+      const rolesData = await interaction.guild.roles.fetch();
+
+      const roles = rolesData
         .filter(r => r.name !== "@everyone")
         .map(r => r.name)
         .slice(0, 25);
+
+      console.log("ROLES FOUND:", roles.length); // debug
 
       const select = new StringSelectMenuBuilder()
         .setCustomId("company_select")
@@ -183,7 +185,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
   } catch (err) {
-    console.error(err);
+    console.error("ERROR:", err);
   }
 });
 
