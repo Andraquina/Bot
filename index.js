@@ -13,12 +13,17 @@ const client = new Client({
   partials: [Partials.Channel]
 });
 
-client.once(Events.ClientReady, () => {
+// =========================
+// ✅ READY
+// =========================
+client.once(Events.ClientReady, (client) => {
   console.log('🔥 BOT IS ONLINE (DEBUG MODE)');
+  console.log(`🤖 Logged in as: ${client.user.tag}`);
+  console.log(`🆔 BOT ID: ${client.user.id}`);
 });
 
 // =========================
-// 🔍 DEBUG INTERACTIONS
+// 🔍 INTERACTION DEBUG
 // =========================
 client.on(Events.InteractionCreate, async interaction => {
 
@@ -26,7 +31,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
   try {
 
-    // ONLY slash commands
     if (interaction.isChatInputCommand()) {
 
       console.log("⚡ COMMAND:", interaction.commandName);
