@@ -68,9 +68,7 @@ function isSameCompany(a, b) {
   return false;
 }
 
-function safeCompanyId(str) {
-  return str.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
-}
+const selections = new Map(); // 🔥 NEW
 
 
 // =========================
@@ -129,29 +127,7 @@ client.on(Events.InteractionCreate, async interaction => {
   try {
 
     // =========================
-    // 🔍 AUTOCOMPLETE
-    // =========================
-    if (interaction.isAutocomplete()) {
-
-      const focused = interaction.options.getFocused().toLowerCase();
-
-      const roles = interaction.guild.roles.cache
-        .filter(r => r.name !== "@everyone")
-        .map(r => r.name);
-
-      const filtered = roles
-        .filter(name => name.toLowerCase().includes(focused))
-        .slice(0, 25);
-
-      await interaction.respond(
-        filtered.map(name => ({ name: name, value: name }))
-      );
-
-      return;
-    }
-
-    // =========================
-    // 🚀 SLASH BROADCAST
+    // 🚀 ULTIMATE UI BROADCAST
     // =========================
     if (interaction.isChatInputCommand() && interaction.commandName === 'broadcast') {
 
@@ -161,134 +137,123 @@ client.on(Events.InteractionCreate, async interaction => {
         return interaction.editReply({ content: "❌ Not allowed." });
       }
 
-      const targets = interaction.options.getString('targets').toLowerCase().split(';').map(t => t.trim());
-      const messageContent = interaction.options.getString('message');
-      const timeRaw = interaction.options.getString('delay');
+      const roles = interaction.guild.roles.cache
+        .filter(r => r.name !== "@everyone")
+        .map(r => r.name)
+        .slice(0, 6);
 
-      let delay = 0;
-
-      if (timeRaw) {
-        const num = parseInt(timeRaw);
-        if (timeRaw.includes("m")) delay = num * 60000;
-        else if (timeRaw.includes("h")) delay = num * 3600000;
-        else if (timeRaw.includes("d")) delay = num * 86400000;
-      }
-
-      const members = await interaction.guild.members.fetch();
-      const targetMembers = [];
-
-      for (const member of members.values()) {
-        if (member.user.bot) continue;
-
-        if (targets.includes("all")) {
-          targetMembers.push(member);
-          continue;
-        }
-
-        const match = member.roles.cache.some(role =>
-          targets.some(t => isSameCompany(role.name, t))
-        );
-
-        if (match) targetMembers.push(member);
-      }
-
-      if (targetMembers.length === 0) {
-        return interaction.editReply({ content: "❌ No users found." });
-      }
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('confirm').setLabel('Confirm').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger)
+      const buttons = roles.map(name =>
+        new ButtonBuilder()
+          .setCustomId(`select_${name}`)
+          .setLabel(name)
+          .setStyle(ButtonStyle.Secondary)
       );
 
+      buttons.push(
+        new ButtonBuilder()
+          .setCustomId("select_all")
+          .setLabel("ALL")
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      const confirm = new ButtonBuilder()
+        .setCustomId("confirm_selection")
+        .setLabel("Confirm")
+        .setStyle(ButtonStyle.Success);
+
+      const row1 = new ActionRowBuilder().addComponents(buttons.slice(0, 5));
+      const row2 = new ActionRowBuilder().addComponents(buttons.slice(5), confirm);
+
+      selections.set(interaction.user.id, []);
+
       await interaction.editReply({
-        content:
-          `📢 **Broadcast Preview**\n\n` +
-          `🎯 Targets: ${targets.join(", ")}\n` +
-          `👥 Users: ${targetMembers.length}\n` +
-          `⏱️ Delay: ${timeRaw || "none"}\n\n` +
-          `💬 ${messageContent}`,
-        components: [row]
-      });
-
-      const msg = await interaction.fetchReply();
-
-      const collector = msg.createMessageComponentCollector({
-        filter: i => i.user.id === interaction.user.id,
-        time: 30000
-      });
-
-      collector.on('collect', async i => {
-
-        if (i.customId === 'cancel') {
-          await i.update({ content: "❌ Cancelled.", components: [] });
-          return collector.stop();
-        }
-
-        if (i.customId === 'confirm') {
-
-          await i.update({
-            content: delay ? `⏳ Scheduled in ${timeRaw}` : "🚀 Preparing...",
-            components: []
-          });
-
-          setTimeout(async () => {
-
-            let success = 0;
-            let failed = 0;
-            const total = targetMembers.length;
-
-            await msg.edit({ content: `🚀 Sending... (0/${total})` });
-
-            for (let i = 0; i < total; i++) {
-
-              const member = targetMembers[i];
-
-              try {
-                const embed = new EmbedBuilder()
-                  .setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db)
-                  .setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update")
-                  .setDescription(messageContent)
-                  .setFooter({
-                    text: "Inter Molds, Inc.",
-                    iconURL: "https://i.postimg.cc/NMBrjhC9/IMI-LOGO-BRANCO-(2).png"
-                  })
-                  .setTimestamp();
-
-                await member.send({ embeds: [embed] });
-                success++;
-
-              } catch {
-                failed++;
-              }
-
-              if (i % 5 === 0 || i === total - 1) {
-                await msg.edit({ content: `🚀 Sending... (${i + 1}/${total})` });
-              }
-            }
-
-            await msg.edit({
-              content:
-                `✅ **Broadcast Completed**\n\n` +
-                `🎯 Targets: ${targets.join(", ")}\n` +
-                `👥 Sent: ${success}\n` +
-                `❌ Failed: ${failed}\n\n` +
-                `💬 ${messageContent}`
-            });
-
-          }, delay);
-
-          collector.stop();
-        }
+        content: "🎯 **Select target companies:**",
+        components: [row1, row2]
       });
 
       return;
     }
 
     // =========================
+    // 🎯 BUTTON HANDLER
+    // =========================
+    if (interaction.isButton()) {
+
+      const userId = interaction.user.id;
+
+      if (!selections.has(userId)) return;
+
+      let selected = selections.get(userId);
+
+      if (interaction.customId.startsWith("select_")) {
+
+        const company = interaction.customId.replace("select_", "");
+
+        if (company === "all") {
+          selected = ["all"];
+        } else {
+          if (selected.includes(company)) {
+            selected = selected.filter(c => c !== company);
+          } else {
+            selected.push(company);
+          }
+        }
+
+        selections.set(userId, selected);
+
+        return interaction.update({
+          content: `🎯 Selected: ${selected.join(", ") || "None"}`,
+          components: interaction.message.components
+        });
+      }
+
+      if (interaction.customId === "confirm_selection") {
+
+        const targets = selections.get(userId);
+        selections.delete(userId);
+
+        if (!targets || targets.length === 0) {
+          return interaction.update({
+            content: "❌ No selection made.",
+            components: []
+          });
+        }
+
+        await interaction.update({
+          content: `🚀 Sending to: ${targets.join(", ")}`,
+          components: []
+        });
+
+        const members = await interaction.guild.members.fetch();
+
+        let success = 0;
+
+        for (const member of members.values()) {
+
+          if (member.user.bot) continue;
+
+          if (
+            targets.includes("all") ||
+            member.roles.cache.some(role =>
+              targets.some(t => isSameCompany(role.name, t))
+            )
+          ) {
+            try {
+              await member.send("📢 **New Company Announcement**");
+              success++;
+            } catch {}
+          }
+        }
+
+        await interaction.followUp({
+          content: `✅ Sent to ${success} users`
+        });
+      }
+    }
+
+    // =========================
     // 🧾 EXISTING SYSTEM
     // =========================
-
     if (interaction.isButton() && interaction.customId === 'open_form') {
 
       try { await interaction.message.delete(); } catch {}
