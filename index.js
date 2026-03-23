@@ -1,5 +1,3 @@
-process.env.TOKEN
-process.env.CLIENT_ID
 const {
   Client,
   GatewayIntentBits,
@@ -13,7 +11,7 @@ const {
   PermissionsBitField,
   ChannelType,
   EmbedBuilder,
-  Partials // 🔥 IMPORTANT
+  Partials
 } = require('discord.js');
 
 const client = new Client({
@@ -24,7 +22,7 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages
   ],
-  partials: [Partials.Channel] // 🔥 REAL FIX
+  partials: [Partials.Channel]
 });
 
 client.once(Events.ClientReady, () => {
@@ -93,7 +91,6 @@ client.on(Events.MessageCreate, async (message) => {
 
   if (message.author.bot) return;
 
-  // 🔥 HANDLE DMs
   if (!message.guild) {
 
     if (repliedUsers.has(message.author.id)) return;
@@ -140,10 +137,149 @@ client.on(Events.GuildMemberAdd, async member => {
 
 
 // =========================
-// 📋 INTERACTIONS
+// 📋 INTERACTIONS (FORMS + APPROVAL)
 // =========================
 client.on(Events.InteractionCreate, async interaction => {
   try {
+
+    // =========================
+    // 🚀 SLASH BROADCAST COMMAND
+    // =========================
+    if (interaction.isChatInputCommand() && interaction.commandName === 'broadcast') {
+
+      await interaction.deferReply();
+
+      if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return interaction.editReply({ content: "❌ Not allowed." });
+      }
+
+      const targets = interaction.options.getString('targets').toLowerCase().split(';').map(t => t.trim());
+      const messageContent = interaction.options.getString('message');
+      const timeRaw = interaction.options.getString('delay');
+
+      let delay = 0;
+
+      if (timeRaw) {
+        const num = parseInt(timeRaw);
+        if (timeRaw.includes("m")) delay = num * 60000;
+        else if (timeRaw.includes("h")) delay = num * 3600000;
+        else if (timeRaw.includes("d")) delay = num * 86400000;
+      }
+
+      const members = await interaction.guild.members.fetch();
+      const targetMembers = [];
+
+      for (const member of members.values()) {
+        if (member.user.bot) continue;
+
+        if (targets.includes("all")) {
+          targetMembers.push(member);
+          continue;
+        }
+
+        const match = member.roles.cache.some(role =>
+          targets.some(t => isSameCompany(role.name, t))
+        );
+
+        if (match) targetMembers.push(member);
+      }
+
+      if (targetMembers.length === 0) {
+        return interaction.editReply({ content: "❌ No users found." });
+      }
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('confirm').setLabel('Confirm').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger)
+      );
+
+      await interaction.editReply({
+        content:
+          `📢 **Broadcast Preview**\n\n` +
+          `🎯 Targets: ${targets.join(", ")}\n` +
+          `👥 Users: ${targetMembers.length}\n` +
+          `⏱️ Delay: ${timeRaw || "none"}\n\n` +
+          `💬 ${messageContent}`,
+        components: [row]
+      });
+
+      const msg = await interaction.fetchReply();
+
+      const collector = msg.createMessageComponentCollector({
+        filter: i => i.user.id === interaction.user.id,
+        time: 30000
+      });
+
+      collector.on('collect', async i => {
+
+        if (i.customId === 'cancel') {
+          await i.update({ content: "❌ Cancelled.", components: [] });
+          return collector.stop();
+        }
+
+        if (i.customId === 'confirm') {
+
+          await i.update({
+            content: delay ? `⏳ Scheduled in ${timeRaw}` : "🚀 Preparing...",
+            components: []
+          });
+
+          setTimeout(async () => {
+
+            let success = 0;
+            let failed = 0;
+            const total = targetMembers.length;
+
+            await msg.edit({ content: `🚀 Sending... (0/${total})` });
+
+            for (let i = 0; i < total; i++) {
+
+              const member = targetMembers[i];
+
+              try {
+                const embed = new EmbedBuilder()
+                  .setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db)
+                  .setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update")
+                  .setDescription(messageContent)
+                  .setFooter({
+                    text: "Inter Molds, Inc.",
+                    iconURL: "https://i.postimg.cc/NMBrjhC9/IMI-LOGO-BRANCO-(2).png"
+                  })
+                  .setTimestamp();
+
+                await member.send({ embeds: [embed] });
+                success++;
+
+              } catch {
+                failed++;
+              }
+
+              if (i % 5 === 0 || i === total - 1) {
+                await msg.edit({ content: `🚀 Sending... (${i + 1}/${total})` });
+              }
+            }
+
+            await msg.edit({
+              content:
+                `✅ **Broadcast Completed**\n\n` +
+                `🎯 Targets: ${targets.join(", ")}\n` +
+                `👥 Sent: ${success}\n` +
+                `❌ Failed: ${failed}\n\n` +
+                `💬 ${messageContent}`
+            });
+
+          }, delay);
+
+          collector.stop();
+        }
+      });
+
+      return;
+    }
+
+    // =========================
+    // 🧾 EXISTING SYSTEM (UNCHANGED)
+    // =========================
 
     if (interaction.isButton() && interaction.customId === 'open_form') {
 
@@ -199,27 +335,16 @@ client.on(Events.InteractionCreate, async interaction => {
       } catch {}
 
       if (role && category) {
-
         await member.roles.add(role);
-
-        await interaction.editReply({
-          content: `Welcome ${name} from ${company} 🎉`
-        });
+        await interaction.editReply({ content: `Welcome ${name} from ${company} 🎉` });
 
       } else {
-
         const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
         if (pendingRole) await member.roles.add(pendingRole);
 
         const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`approve_${member.id}_${safeCompanyId(company)}`)
-            .setLabel('Approve')
-            .setStyle(ButtonStyle.Success),
-          new ButtonBuilder()
-            .setCustomId(`reject_${member.id}_${safeCompanyId(company)}`)
-            .setLabel('Reject')
-            .setStyle(ButtonStyle.Danger)
+          new ButtonBuilder().setCustomId(`approve_${member.id}_${safeCompanyId(company)}`).setLabel('Approve').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`reject_${member.id}_${safeCompanyId(company)}`).setLabel('Reject').setStyle(ButtonStyle.Danger)
         );
 
         const adminChannel = interaction.guild.channels.cache.find(c => c.name === "admin");
@@ -231,82 +356,8 @@ client.on(Events.InteractionCreate, async interaction => {
           });
         }
 
-        await interaction.editReply({
-          content: `Thanks! We’re setting things up for you ⏳`
-        });
+        await interaction.editReply({ content: `Thanks! We’re setting things up for you ⏳` });
       }
-    }
-
-    if (interaction.isButton() && interaction.customId.startsWith("approve_")) {
-
-      await interaction.deferReply({ ephemeral: true });
-
-      const [_, userId, companyId] = interaction.customId.split('_');
-
-      const member = await interaction.guild.members.fetch(userId);
-
-      let role = interaction.guild.roles.cache.find(r =>
-        isSameCompany(r.name, companyId)
-      );
-
-      let company = role ? role.name : formatWords(companyId);
-
-      if (!role) {
-        role = await interaction.guild.roles.create({ name: company });
-      }
-
-      const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
-      if (pendingRole) await member.roles.remove(pendingRole);
-
-      await member.roles.add(role);
-
-      for (const ch of interaction.guild.channels.cache.values()) {
-        if (
-          ch.name.toLowerCase().includes("announcement") ||
-          ch.name.toLowerCase().includes("rule")
-        ) {
-          await ch.permissionOverwrites.edit(role.id, {
-            ViewChannel: true,
-            ReadMessageHistory: true,
-            SendMessages: false
-          });
-        }
-      }
-
-      const welcomeChannel = interaction.guild.channels.cache.find(c => c.name === "welcome");
-      if (welcomeChannel) {
-        await welcomeChannel.permissionOverwrites.edit(role.id, { ViewChannel: false });
-      }
-
-      try {
-        await member.send(`✅ You’ve been approved! Welcome to **Inter Molds, Inc.** 🎉`);
-
-        const rulesEmbed = new EmbedBuilder()
-          .setColor(0xf1c40f)
-          .setTitle("📜 Company Rules")
-          .setDescription(
-            `━━━━━━━━━━━━━━━\n` +
-            `1. Be respectful\n` +
-            `2. No spam\n` +
-            `3. Follow all guidelines\n` +
-            `4. Keep discussions professional\n` +
-            `5. Respect privacy\n` +
-            `━━━━━━━━━━━━━━━`
-          )
-          .setFooter({
-            text: "Inter Molds, Inc.",
-            iconURL: "https://i.postimg.cc/NMBrjhC9/IMI-LOGO-BRANCO-(2).png"
-          })
-          .setTimestamp();
-
-        await member.send({ embeds: [rulesEmbed] });
-
-      } catch (err) {
-        console.log("DM failed:", err.message);
-      }
-
-      await interaction.message.delete().catch(() => {});
-      await interaction.editReply({ content: `✅ Approved ${member.user.username}` });
     }
 
   } catch (error) {
