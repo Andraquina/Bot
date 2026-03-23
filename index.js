@@ -10,7 +10,8 @@ const {
   Events,
   PermissionsBitField,
   ChannelType,
-  EmbedBuilder
+  EmbedBuilder,
+  Partials // 🔥 IMPORTANT
 } = require('discord.js');
 
 const client = new Client({
@@ -19,9 +20,9 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.DirectMessages // ✅ FIXED
+    GatewayIntentBits.DirectMessages
   ],
-  partials: ['CHANNEL'] // ✅ FIXED
+  partials: [Partials.Channel] // 🔥 REAL FIX
 });
 
 client.once(Events.ClientReady, () => {
@@ -90,7 +91,7 @@ client.on(Events.MessageCreate, async (message) => {
 
   if (message.author.bot) return;
 
-  // 🔥 HANDLE DMs ONLY
+  // 🔥 HANDLE DMs
   if (!message.guild) {
 
     if (repliedUsers.has(message.author.id)) return;
@@ -257,7 +258,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await member.roles.add(role);
 
-      // Access channels
       for (const ch of interaction.guild.channels.cache.values()) {
         if (
           ch.name.toLowerCase().includes("announcement") ||
@@ -266,8 +266,7 @@ client.on(Events.InteractionCreate, async interaction => {
           await ch.permissionOverwrites.edit(role.id, {
             ViewChannel: true,
             ReadMessageHistory: true,
-            SendMessages: false,
-            AddReactions: false
+            SendMessages: false
           });
         }
       }
@@ -311,23 +310,6 @@ client.on(Events.InteractionCreate, async interaction => {
   } catch (error) {
     console.error("ERROR:", error);
   }
-});
-
-
-// =========================
-// 🚀 BROADCAST SYSTEM (FINAL BOSS)
-// =========================
-client.on(Events.MessageCreate, async message => {
-
-  if (message.author.bot) return;
-  if (!message.guild) return; // 🔥 prevents conflict with DM handler
-  if (message.channel.name !== "broadcast") return;
-
-  if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-    return message.reply("❌ Not allowed.");
-  }
-
-  // (rest of your broadcast code unchanged...)
 });
 
 client.login(process.env.TOKEN);
