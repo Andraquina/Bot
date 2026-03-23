@@ -18,7 +18,7 @@ const {
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers // 🔥 IMPORTANT
+    GatewayIntentBits.GuildMembers
   ]
 });
 
@@ -74,13 +74,13 @@ client.on(Events.InteractionCreate, async interaction => {
   try {
 
     // =========================
-    // 🚀 START
+    // 🚀 START COMMAND
     // =========================
     if (interaction.isChatInputCommand() && interaction.commandName === "broadcast") {
 
-      const rolesData = await interaction.guild.roles.fetch();
+      const rolesData = interaction.guild.roles.cache;
 
-      console.log("ROLES:", rolesData.size); // 🔍 debug
+      console.log("ROLES CACHE:", rolesData.size);
 
       const roles = rolesData
         .filter(r => r.name !== "@everyone" && !r.managed)
@@ -89,7 +89,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (roles.length === 0) {
         return interaction.reply({
-          content: "❌ No roles found. Check bot permissions/intents.",
+          content: "❌ No roles found. Check bot permissions or role position.",
           ephemeral: true
         });
       }
@@ -114,7 +114,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // 📌 DROPDOWN
+    // 📌 DROPDOWN SELECT
     // =========================
     if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
 
@@ -147,7 +147,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // 📝 MODAL
+    // 📝 MODAL SUBMIT
     // =========================
     if (interaction.isModalSubmit() && interaction.customId === "broadcast_modal") {
 
