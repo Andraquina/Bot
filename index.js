@@ -1,4 +1,5 @@
-require('dotenv').config();
+process.env.TOKEN
+process.env.CLIENT_ID
 const {
   Client,
   GatewayIntentBits,
