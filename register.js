@@ -1,4 +1,3 @@
-require('dotenv').config();
 const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 
 const commands = [
@@ -19,14 +18,18 @@ const commands = [
         .setRequired(false))
 ].map(cmd => cmd.toJSON());
 
-const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+// 🔥 DIRECT VALUES (NO dotenv)
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+
+const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 (async () => {
   try {
     console.log('Registering slash commands...');
 
     await rest.put(
-      Routes.applicationCommands(process.env.CLIENT_ID),
+      Routes.applicationCommands(CLIENT_ID),
       { body: commands }
     );
 
