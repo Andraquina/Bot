@@ -62,6 +62,31 @@ function isSameCompany(a, b) {
   return na.includes(nb) || nb.includes(na);
 }
 
+async function buildDropdown(guild, selected = []) {
+  await guild.roles.fetch();
+
+  const roles = guild.roles.cache
+    .filter(r => r.name !== "@everyone" && !r.managed)
+    .map(r => r.name)
+    .slice(0, 25);
+
+  const options = [
+    { label: "ALL", value: "all", default: selected.includes("all") },
+    ...roles.map(r => ({
+      label: r,
+      value: r,
+      default: selected.includes(r)
+    }))
+  ];
+
+  return new StringSelectMenuBuilder()
+    .setCustomId("select_companies")
+    .setPlaceholder("Select companies")
+    .setMinValues(1)
+    .setMaxValues(Math.min(options.length, 25))
+    .addOptions(options);
+}
+
 // =========================
 // 📋 INTERACTIONS
 // =========================
@@ -74,26 +99,11 @@ client.on(Events.InteractionCreate, async interaction => {
     // =========================
     if (interaction.isChatInputCommand() && interaction.commandName === "broadcast") {
 
-      await interaction.guild.roles.fetch();
-
-      const roles = interaction.guild.roles.cache
-        .filter(r => r.name !== "@everyone" && !r.managed)
-        .map(r => r.name)
-        .slice(0, 25);
-
-      const select = new StringSelectMenuBuilder()
-        .setCustomId("select_companies")
-        .setPlaceholder("Select companies")
-        .setMinValues(1)
-        .setMaxValues(Math.min(roles.length + 1, 25))
-        .addOptions([
-          { label: "ALL", value: "all" },
-          ...roles.map(r => ({ label: r, value: r }))
-        ]);
+      const dropdown = await buildDropdown(interaction.guild);
 
       await interaction.reply({
         content: "🎯 Select companies:",
-        components: [new ActionRowBuilder().addComponents(select)],
+        components: [new ActionRowBuilder().addComponents(dropdown)],
         ephemeral: true
       });
 
@@ -105,7 +115,6 @@ client.on(Events.InteractionCreate, async interaction => {
     // =========================
     if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
 
-      // 🔥 prevent double execution
       if (interaction.replied || interaction.deferred) return;
 
       session.set(interaction.user.id, {
@@ -116,24 +125,23 @@ client.on(Events.InteractionCreate, async interaction => {
         .setCustomId("broadcast_modal")
         .setTitle("Broadcast Message");
 
-      const messageInput = new TextInputBuilder()
-        .setCustomId("message")
-        .setLabel("Message")
-        .setStyle(TextInputStyle.Paragraph);
-
-      const delayInput = new TextInputBuilder()
-        .setCustomId("delay")
-        .setLabel("Delay (10m, 1h optional)")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false);
-
       modal.addComponents(
-        new ActionRowBuilder().addComponents(messageInput),
-        new ActionRowBuilder().addComponents(delayInput)
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("message")
+            .setLabel("Message")
+            .setStyle(TextInputStyle.Paragraph)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("delay")
+            .setLabel("Delay (10m, 1h optional)")
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false)
+        )
       );
 
       await interaction.showModal(modal);
-
       return;
     }
 
@@ -149,7 +157,6 @@ client.on(Events.InteractionCreate, async interaction => {
       const timeRaw = interaction.fields.getTextInputValue("delay");
 
       let delay = 0;
-
       if (timeRaw) {
         const num = parseInt(timeRaw);
         if (timeRaw.includes("m")) delay = num * 60000;
@@ -158,23 +165,16 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const members = await interaction.guild.members.fetch();
       const targets = data.targets;
-      const targetMembers = [];
 
-      for (const member of members.values()) {
-
-        if (member.user.bot) continue;
-
-        if (
+      const targetMembers = members.filter(m =>
+        !m.user.bot &&
+        (
           targets.includes("all") ||
-          member.roles.cache.some(role =>
-            targets.some(t => isSameCompany(role.name, t))
-          )
-        ) {
-          targetMembers.push(member);
-        }
-      }
+          m.roles.cache.some(r => targets.some(t => isSameCompany(r.name, t)))
+        )
+      );
 
-      const row = new ActionRowBuilder().addComponents(
+      const buttons = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId("back").setLabel("⬅ Back").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
@@ -184,10 +184,10 @@ client.on(Events.InteractionCreate, async interaction => {
         content:
           `📢 **Preview**\n\n` +
           `🎯 ${targets.join(", ")}\n` +
-          `👥 ${targetMembers.length} users\n` +
+          `👥 ${targetMembers.size} users\n` +
           `⏱️ ${timeRaw || "no delay"}\n\n` +
           `💬 ${messageContent}`,
-        components: [row],
+        components: [buttons],
         ephemeral: true
       });
 
@@ -215,29 +215,14 @@ client.on(Events.InteractionCreate, async interaction => {
         return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
 
-      // ⬅ BACK
+      // ⬅ BACK (SMART)
       if (interaction.customId === "back") {
 
-        await interaction.guild.roles.fetch();
-
-        const roles = interaction.guild.roles.cache
-          .filter(r => r.name !== "@everyone" && !r.managed)
-          .map(r => r.name)
-          .slice(0, 25);
-
-        const select = new StringSelectMenuBuilder()
-          .setCustomId("select_companies")
-          .setPlaceholder("Select companies")
-          .setMinValues(1)
-          .setMaxValues(Math.min(roles.length + 1, 25))
-          .addOptions([
-            { label: "ALL", value: "all" },
-            ...roles.map(r => ({ label: r, value: r }))
-          ]);
+        const dropdown = await buildDropdown(interaction.guild, data.targets);
 
         return interaction.update({
-          content: "🎯 Select companies again:",
-          components: [new ActionRowBuilder().addComponents(select)]
+          content: "🎯 Select companies:",
+          components: [new ActionRowBuilder().addComponents(dropdown)]
         });
       }
 
@@ -247,7 +232,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const { targetMembers, messageContent, delay, targets } = data;
 
         await interaction.update({
-          content: delay ? `⏳ Scheduled...` : "🚀 Sending...",
+          content: delay ? "⏳ Scheduled..." : "🚀 Sending...",
           components: []
         });
 
@@ -256,19 +241,19 @@ client.on(Events.InteractionCreate, async interaction => {
           let success = 0;
           let failed = 0;
 
-          for (const member of targetMembers) {
-
+          for (const member of targetMembers.values()) {
             try {
-              const embed = new EmbedBuilder()
-                .setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db)
-                .setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update")
-                .setDescription(messageContent)
-                .setFooter({ text: "Inter Molds, Inc." })
-                .setTimestamp();
-
-              await member.send({ embeds: [embed] });
+              await member.send({
+                embeds: [
+                  new EmbedBuilder()
+                    .setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db)
+                    .setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update")
+                    .setDescription(messageContent)
+                    .setFooter({ text: "Inter Molds, Inc." })
+                    .setTimestamp()
+                ]
+              });
               success++;
-
             } catch {
               failed++;
             }
