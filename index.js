@@ -38,10 +38,6 @@ function normalize(str) {
   return str.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-function extractKeywords(str) {
-  return str.toLowerCase().split(/\s+/);
-}
-
 function formatWords(str) {
   return str
     .toLowerCase()
@@ -69,11 +65,7 @@ function isSameCompany(a, b) {
 
   if (acA === nb || acB === na) return true;
 
-  const wordsA = extractKeywords(a);
-  const wordsB = extractKeywords(b);
-
-  const common = wordsA.filter(w => wordsB.includes(w));
-  return common.length >= Math.min(wordsA.length, wordsB.length) / 2;
+  return false;
 }
 
 function safeCompanyId(str) {
@@ -95,20 +87,14 @@ client.on(Events.MessageCreate, async (message) => {
 
     if (repliedUsers.has(message.author.id)) return;
 
-    try {
-      await message.reply(
-        "📩 **Inter Molds System**\n\n" +
-        "This bot is used for notifications only.\n" +
-        "We do not receive or monitor messages sent here.\n\n" +
-        "If you need assistance, please contact us through our official channels."
-      );
+    await message.reply(
+      "📩 **Inter Molds System**\n\n" +
+      "This bot is used for notifications only.\n" +
+      "We do not receive or monitor messages sent here.\n\n" +
+      "If you need assistance, please contact us through our official channels."
+    );
 
-      repliedUsers.add(message.author.id);
-
-    } catch (err) {
-      console.log("DM reply failed:", err.message);
-    }
-
+    repliedUsers.add(message.author.id);
     return;
   }
 });
@@ -137,13 +123,35 @@ client.on(Events.GuildMemberAdd, async member => {
 
 
 // =========================
-// 📋 INTERACTIONS (FORMS + APPROVAL)
+// 📋 INTERACTIONS
 // =========================
 client.on(Events.InteractionCreate, async interaction => {
   try {
 
     // =========================
-    // 🚀 SLASH BROADCAST COMMAND
+    // 🔍 AUTOCOMPLETE
+    // =========================
+    if (interaction.isAutocomplete()) {
+
+      const focused = interaction.options.getFocused().toLowerCase();
+
+      const roles = interaction.guild.roles.cache
+        .filter(r => r.name !== "@everyone")
+        .map(r => r.name);
+
+      const filtered = roles
+        .filter(name => name.toLowerCase().includes(focused))
+        .slice(0, 25);
+
+      await interaction.respond(
+        filtered.map(name => ({ name: name, value: name }))
+      );
+
+      return;
+    }
+
+    // =========================
+    // 🚀 SLASH BROADCAST
     // =========================
     if (interaction.isChatInputCommand() && interaction.commandName === 'broadcast') {
 
@@ -278,7 +286,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // 🧾 EXISTING SYSTEM (UNCHANGED)
+    // 🧾 EXISTING SYSTEM
     // =========================
 
     if (interaction.isButton() && interaction.customId === 'open_form') {
@@ -306,58 +314,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await interaction.showModal(modal);
       return;
-    }
-
-    if (interaction.isModalSubmit() && interaction.customId === 'user_form') {
-
-      await interaction.deferReply({ ephemeral: true });
-
-      let name = formatWords(interaction.fields.getTextInputValue('name'));
-      let company = formatWords(interaction.fields.getTextInputValue('company'));
-
-      const member = await interaction.guild.members.fetch(interaction.user.id);
-
-      const companyShort = getAcronym(company);
-
-      let role = interaction.guild.roles.cache.find(r =>
-        isSameCompany(r.name, company)
-      );
-
-      let category = interaction.guild.channels.cache.find(c =>
-        c.type === ChannelType.GuildCategory &&
-        isSameCompany(c.name, company)
-      );
-
-      try {
-        let nickname = `${name} | ${companyShort}`;
-        if (nickname.length > 32) nickname = nickname.slice(0, 32);
-        await member.setNickname(nickname);
-      } catch {}
-
-      if (role && category) {
-        await member.roles.add(role);
-        await interaction.editReply({ content: `Welcome ${name} from ${company} 🎉` });
-
-      } else {
-        const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
-        if (pendingRole) await member.roles.add(pendingRole);
-
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`approve_${member.id}_${safeCompanyId(company)}`).setLabel('Approve').setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId(`reject_${member.id}_${safeCompanyId(company)}`).setLabel('Reject').setStyle(ButtonStyle.Danger)
-        );
-
-        const adminChannel = interaction.guild.channels.cache.find(c => c.name === "admin");
-
-        if (adminChannel) {
-          await adminChannel.send({
-            content: `🚨 New company request\n\nUser: <@${member.id}>\nCompany: ${company}`,
-            components: [row]
-          });
-        }
-
-        await interaction.editReply({ content: `Thanks! We’re setting things up for you ⏳` });
-      }
     }
 
   } catch (error) {
