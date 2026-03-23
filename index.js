@@ -1,34 +1,68 @@
-const { REST, Routes, SlashCommandBuilder } = require('discord.js');
+const {
+  Client,
+  GatewayIntentBits,
+  Events,
+  Partials
+} = require('discord.js');
 
-const commands = [
-  new SlashCommandBuilder()
-    .setName('broadcast')
-    .setDescription('Dropdown broadcast system')
-].map(c => c.toJSON());
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers
+  ],
+  partials: [Partials.Channel]
+});
 
-const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+// =========================
+// 🔥 READY + COMMAND CHECK
+// =========================
+client.once(Events.ClientReady, async (client) => {
+  console.log('🔥 BOT IS ONLINE');
+  console.log(`🤖 Logged in as: ${client.user.tag}`);
+  console.log(`🆔 BOT ID: ${client.user.id}`);
 
-(async () => {
   try {
-    console.log("🧹 Resetting commands...");
+    const commands = await client.application.commands.fetch();
 
-    // clear global
-    await rest.put(
-      Routes.applicationCommands(process.env.CLIENT_ID),
-      { body: [] }
-    );
+    console.log("📦 REGISTERED GLOBAL COMMANDS:");
+    commands.forEach(cmd => {
+      console.log(`- ${cmd.name}`);
+    });
 
-    // register fresh to guild
-    await rest.put(
-      Routes.applicationGuildCommands(
-        process.env.CLIENT_ID,
-        process.env.GUILD_ID
-      ),
-      { body: commands }
-    );
-
-    console.log("✅ Commands registered correctly");
   } catch (err) {
-    console.error(err);
+    console.error("❌ FAILED TO FETCH COMMANDS:", err);
   }
-})();
+});
+
+// =========================
+// 🔍 INTERACTION DEBUG
+// =========================
+client.on(Events.InteractionCreate, async interaction => {
+
+  console.log("📥 INTERACTION RECEIVED:", interaction.type);
+
+  try {
+
+    if (interaction.isChatInputCommand()) {
+
+      console.log("⚡ COMMAND:", interaction.commandName);
+
+      if (interaction.commandName === "broadcast") {
+
+        console.log("✅ BROADCAST TRIGGERED");
+
+        await interaction.reply({
+          content: "✅ Broadcast command is working!",
+          ephemeral: true
+        });
+
+        return;
+      }
+    }
+
+  } catch (err) {
+    console.error("❌ ERROR:", err);
+  }
+});
+
+client.login(process.env.TOKEN);
