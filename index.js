@@ -74,19 +74,12 @@ client.on(Events.InteractionCreate, async interaction => {
     // =========================
     if (interaction.isChatInputCommand() && interaction.commandName === "broadcast") {
 
-      await interaction.guild.roles.fetch(); // ensure cache
+      await interaction.guild.roles.fetch();
 
       const roles = interaction.guild.roles.cache
         .filter(r => r.name !== "@everyone" && !r.managed)
         .map(r => r.name)
         .slice(0, 25);
-
-      if (roles.length === 0) {
-        return interaction.reply({
-          content: "❌ No roles found.",
-          ephemeral: true
-        });
-      }
 
       const select = new StringSelectMenuBuilder()
         .setCustomId("select_companies")
@@ -108,9 +101,12 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // 📌 DROPDOWN → INSTANT MODAL
+    // 📌 DROPDOWN → MODAL
     // =========================
     if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
+
+      // 🔥 prevent double execution
+      if (interaction.replied || interaction.deferred) return;
 
       session.set(interaction.user.id, {
         targets: interaction.values
@@ -136,15 +132,13 @@ client.on(Events.InteractionCreate, async interaction => {
         new ActionRowBuilder().addComponents(delayInput)
       );
 
-      // 🔥 KEY UX FIX
-      await interaction.deferUpdate();
       await interaction.showModal(modal);
 
       return;
     }
 
     // =========================
-    // 📝 MODAL
+    // 📝 MODAL → PREVIEW
     // =========================
     if (interaction.isModalSubmit() && interaction.customId === "broadcast_modal") {
 
@@ -180,15 +174,9 @@ client.on(Events.InteractionCreate, async interaction => {
         }
       }
 
-      if (targetMembers.length === 0) {
-        return interaction.reply({
-          content: "❌ No users found.",
-          ephemeral: true
-        });
-      }
-
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("back").setLabel("⬅ Back").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
       );
 
@@ -214,18 +202,46 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // ✅ CONFIRM / CANCEL
+    // 🔘 BUTTONS
     // =========================
     if (interaction.isButton()) {
 
       const data = session.get(interaction.user.id);
       if (!data) return;
 
+      // ❌ CANCEL
       if (interaction.customId === "cancel") {
         session.delete(interaction.user.id);
         return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
 
+      // ⬅ BACK
+      if (interaction.customId === "back") {
+
+        await interaction.guild.roles.fetch();
+
+        const roles = interaction.guild.roles.cache
+          .filter(r => r.name !== "@everyone" && !r.managed)
+          .map(r => r.name)
+          .slice(0, 25);
+
+        const select = new StringSelectMenuBuilder()
+          .setCustomId("select_companies")
+          .setPlaceholder("Select companies")
+          .setMinValues(1)
+          .setMaxValues(Math.min(roles.length + 1, 25))
+          .addOptions([
+            { label: "ALL", value: "all" },
+            ...roles.map(r => ({ label: r, value: r }))
+          ]);
+
+        return interaction.update({
+          content: "🎯 Select companies again:",
+          components: [new ActionRowBuilder().addComponents(select)]
+        });
+      }
+
+      // ✅ CONFIRM
       if (interaction.customId === "confirm") {
 
         const { targetMembers, messageContent, delay, targets } = data;
