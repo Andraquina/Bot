@@ -78,6 +78,9 @@ client.on(Events.InteractionCreate, async interaction => {
     // =========================
     if (interaction.isChatInputCommand() && interaction.commandName === "broadcast") {
 
+      // 🔥 FORCE CACHE LOAD
+      await interaction.guild.roles.fetch();
+
       const rolesData = interaction.guild.roles.cache;
 
       console.log("ROLES CACHE:", rolesData.size);
@@ -89,7 +92,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (roles.length === 0) {
         return interaction.reply({
-          content: "❌ No roles found. Check bot permissions or role position.",
+          content: "❌ No roles found. Bot may lack permissions or roles are still loading.",
           ephemeral: true
         });
       }
@@ -114,7 +117,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // 📌 DROPDOWN SELECT
+    // 📌 DROPDOWN
     // =========================
     if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
 
@@ -147,7 +150,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // 📝 MODAL SUBMIT
+    // 📝 MODAL
     // =========================
     if (interaction.isModalSubmit() && interaction.customId === "broadcast_modal") {
 
