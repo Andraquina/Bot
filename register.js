@@ -1,28 +1,27 @@
-const { REST, Routes } = require('discord.js');
+const { REST, Routes, SlashCommandBuilder } = require('discord.js');
+
+const commands = [
+  new SlashCommandBuilder()
+    .setName('broadcast')
+    .setDescription('Send a broadcast message with dropdown selection')
+].map(cmd => cmd.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 (async () => {
   try {
-    console.log("🧹 Clearing ALL commands (GLOBAL + GUILD)");
+    console.log('🚀 Registering dropdown /broadcast command...');
 
-    // ❌ remove GLOBAL commands
-    await rest.put(
-      Routes.applicationCommands(process.env.CLIENT_ID),
-      { body: [] }
-    );
-
-    // ❌ remove GUILD commands
     await rest.put(
       Routes.applicationGuildCommands(
         process.env.CLIENT_ID,
         process.env.GUILD_ID
       ),
-      { body: [] }
+      { body: commands }
     );
 
-    console.log("✅ EVERYTHING CLEARED");
-  } catch (err) {
-    console.error(err);
+    console.log('✅ Dropdown command registered!');
+  } catch (error) {
+    console.error(error);
   }
 })();
