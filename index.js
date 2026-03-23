@@ -54,13 +54,11 @@ client.on(Events.InteractionCreate, async interaction => {
     // =========================
     if (interaction.isChatInputCommand() && interaction.commandName === 'broadcast') {
 
-      await interaction.deferReply({ ephemeral: true });
-
       if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return interaction.editReply("❌ Not allowed.");
+        return interaction.reply({ content: "❌ Not allowed.", ephemeral: true });
       }
 
-      // 🔥 FIX: fetch roles instead of cache
+      // 🔥 fetch roles properly
       const rolesData = await interaction.guild.roles.fetch();
 
       const roles = rolesData
@@ -68,13 +66,20 @@ client.on(Events.InteractionCreate, async interaction => {
         .map(r => r.name)
         .slice(0, 25);
 
-      console.log("ROLES FOUND:", roles.length); // debug
+      console.log("ROLES FOUND:", roles.length);
+
+      if (roles.length === 0) {
+        return interaction.reply({
+          content: "❌ No roles found. Check bot permissions.",
+          ephemeral: true
+        });
+      }
 
       const select = new StringSelectMenuBuilder()
         .setCustomId("company_select")
         .setPlaceholder("Select companies...")
         .setMinValues(1)
-        .setMaxValues(Math.min(roles.length, 25))
+        .setMaxValues(Math.min(roles.length + 1, 25))
         .addOptions([
           { label: "ALL", value: "all" },
           ...roles.map(r => ({ label: r, value: r }))
@@ -82,9 +87,11 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const row = new ActionRowBuilder().addComponents(select);
 
-      await interaction.editReply({
+      // ✅ IMPORTANT: use reply, NOT deferReply
+      await interaction.reply({
         content: "🎯 Select companies:",
-        components: [row]
+        components: [row],
+        ephemeral: true
       });
 
       return;
@@ -117,7 +124,9 @@ client.on(Events.InteractionCreate, async interaction => {
         new ActionRowBuilder().addComponents(delayInput)
       );
 
+      // ✅ IMPORTANT: no deferReply here
       await interaction.showModal(modal);
+
       return;
     }
 
