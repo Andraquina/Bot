@@ -2,66 +2,64 @@ const {
   Client,
   GatewayIntentBits,
   Events,
-  Partials
+  REST,
+  Routes,
+  SlashCommandBuilder
 } = require('discord.js');
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers
-  ],
-  partials: [Partials.Channel]
+  intents: [GatewayIntentBits.Guilds]
 });
 
 // =========================
-// 🔥 READY + COMMAND CHECK
+// 🚀 REGISTER COMMAND ON START
 // =========================
 client.once(Events.ClientReady, async (client) => {
   console.log('🔥 BOT IS ONLINE');
-  console.log(`🤖 Logged in as: ${client.user.tag}`);
   console.log(`🆔 BOT ID: ${client.user.id}`);
 
-  try {
-    const commands = await client.application.commands.fetch();
+  const commands = [
+    new SlashCommandBuilder()
+      .setName('broadcast2')
+      .setDescription('Test command')
+  ].map(c => c.toJSON());
 
-    console.log("📦 REGISTERED GLOBAL COMMANDS:");
-    commands.forEach(cmd => {
-      console.log(`- ${cmd.name}`);
-    });
+  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+
+  try {
+    console.log("🚀 Registering command directly...");
+
+    await rest.put(
+      Routes.applicationGuildCommands(
+        process.env.CLIENT_ID,
+        process.env.GUILD_ID
+      ),
+      { body: commands }
+    );
+
+    console.log("✅ Command registered SUCCESSFULLY");
 
   } catch (err) {
-    console.error("❌ FAILED TO FETCH COMMANDS:", err);
+    console.error("❌ REGISTER ERROR:", err);
   }
 });
 
 // =========================
-// 🔍 INTERACTION DEBUG
+// 🔍 TEST INTERACTION
 // =========================
 client.on(Events.InteractionCreate, async interaction => {
 
-  console.log("📥 INTERACTION RECEIVED:", interaction.type);
+  console.log("📥 INTERACTION RECEIVED");
 
-  try {
+  if (interaction.isChatInputCommand()) {
+    console.log("⚡ COMMAND:", interaction.commandName);
 
-    if (interaction.isChatInputCommand()) {
-
-      console.log("⚡ COMMAND:", interaction.commandName);
-
-      if (interaction.commandName === "broadcast") {
-
-        console.log("✅ BROADCAST TRIGGERED");
-
-        await interaction.reply({
-          content: "✅ Broadcast command is working!",
-          ephemeral: true
-        });
-
-        return;
-      }
+    if (interaction.commandName === "broadcast2") {
+      await interaction.reply({
+        content: "✅ IT FINALLY WORKS",
+        ephemeral: true
+      });
     }
-
-  } catch (err) {
-    console.error("❌ ERROR:", err);
   }
 });
 
