@@ -96,19 +96,32 @@ async function buildDropdown(guild, selected = []) {
 // 👋 ON USER JOIN
 // =========================
 client.on(Events.GuildMemberAdd, async member => {
-  const channel = member.guild.channels.cache.find(c => c.name.toLowerCase().includes("welcome"));
-  if (!channel) return;
+  console.log(`👤 New member detected: ${member.user.tag}`);
+  
+  // Find channel that includes "welcome" in the name
+  const channel = member.guild.channels.cache.find(c => 
+    c.name.toLowerCase().includes("welcome") && c.type === ChannelType.GuildText
+  );
+
+  if (!channel) {
+    return console.error("❌ Could not find a text channel with 'welcome' in the name.");
+  }
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('open_onboarding_modal').setLabel('Start Setup').setStyle(ButtonStyle.Primary)
   );
 
-  const welcomeMsg = await channel.send({
-    content: `Welcome <@${member.id}>! To access the server, please click the button below to register.`,
-    components: [row]
-  });
+  try {
+    const welcomeMsg = await channel.send({
+      content: `Welcome <@${member.id}>! To access the server, please click the button below to register.`,
+      components: [row]
+    });
 
-  onboardingData.set(member.id, { welcomeMsgId: welcomeMsg.id, welcomeChannelId: channel.id });
+    onboardingData.set(member.id, { welcomeMsgId: welcomeMsg.id, welcomeChannelId: channel.id });
+    console.log(`✅ Welcome message sent to ${member.user.tag}`);
+  } catch (err) {
+    console.error(`❌ Failed to send welcome message:`, err);
+  }
 });
 
 // =========================
@@ -182,7 +195,6 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Text Channel Permissions (Corrected Flags)
           await interaction.guild.channels.create({
             name: `general`,
             type: ChannelType.GuildText,
@@ -210,7 +222,6 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Voice Call Permissions (Corrected Flags)
           await interaction.guild.channels.create({
             name: `Voice Call`,
             type: ChannelType.GuildVoice,
@@ -223,7 +234,7 @@ client.on(Events.InteractionCreate, async interaction => {
                   PermissionsBitField.Flags.ViewChannel,
                   PermissionsBitField.Flags.Connect,
                   PermissionsBitField.Flags.Speak,
-                  PermissionsBitField.Flags.Stream, // Official flag for "Video"
+                  PermissionsBitField.Flags.Stream,
                   PermissionsBitField.Flags.UseVAD,
                   PermissionsBitField.Flags.PrioritySpeaker,
                   PermissionsBitField.Flags.SendMessages,
@@ -264,7 +275,6 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // Start Broadcast (Original logic)
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         const msg = await interaction.reply({
@@ -276,7 +286,6 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // Broadcast confirm/cancel
       const data = session.get(interaction.user.id);
       if (!data) return;
       if (interaction.customId === "cancel") {
