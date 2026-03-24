@@ -23,6 +23,7 @@ const client = new Client({
 });
 
 const session = new Map();
+const guildMemberCache = new Map();
 
 // =========================
 // 🚀 REGISTER COMMAND
@@ -169,7 +170,14 @@ client.on(Events.InteractionCreate, async interaction => {
         else if (timeRaw.includes("h")) delay = num * 3600000;
       }
 
-      const members = await interaction.guild.members.fetch();
+      // 🔥 MEMBER CACHE (FIX RATE LIMIT)
+      let members = guildMemberCache.get(interaction.guild.id);
+
+      if (!members) {
+        members = await interaction.guild.members.fetch();
+        guildMemberCache.set(interaction.guild.id, members);
+      }
+
       const targets = data.targets;
 
       const targetMembers = members.filter(m =>
@@ -223,12 +231,11 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
-      // ⬅ BACK (FIXED)
+      // ⬅ BACK
       if (interaction.customId === "back") {
 
         const dropdown = await buildDropdown(interaction.guild, data.targets);
 
-        // 🔥 RESET SESSION
         session.set(interaction.user.id, {
           message: data.message
         });
