@@ -162,15 +162,33 @@ client.on(Events.InteractionCreate, async interaction => {
           const cleanCompany = formatTitleCase(data.company);
           const acronym = getAcronym(cleanCompany);
 
-          // 1. Nickname
+          // 1. DELETE WELCOME MESSAGE IMMEDIATELY
+          if (data.welcomeMsgId && data.welcomeChannelId) {
+            const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
+            if (welcomeChan) {
+              const msg = await welcomeChan.messages.fetch(data.welcomeMsgId).catch(() => null);
+              if (msg) await msg.delete().catch(() => null);
+              
+              // HIDDEN FROM USER
+              await welcomeChan.permissionOverwrites.create(member.id, { ViewChannel: false }).catch(() => null);
+            }
+          }
+
+          // 2. Nickname
           await member.setNickname(`${cleanName} | ${acronym}`).catch(() => null);
 
-          // 2. Role
+          // 3. Role & Hide Welcome Channel from Role
           let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, cleanCompany));
           if (!role) role = await interaction.guild.roles.create({ name: cleanCompany, color: 0x3498db });
           await member.roles.add(role);
 
-          // 3. Category & Company Channels
+          // Double Lock: Hide welcome channel from the new role too
+          const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
+          if (welcomeChan) {
+            await welcomeChan.permissionOverwrites.create(role.id, { ViewChannel: false }).catch(() => null);
+          }
+
+          // 4. Company Channels
           const category = await interaction.guild.channels.create({
             name: cleanCompany,
             type: ChannelType.GuildCategory,
@@ -200,24 +218,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // 4. CLEANUP WELCOME (FORCE DELETE AND HIDE)
-          if (data.welcomeMsgId && data.welcomeChannelId) {
-            const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
-            if (welcomeChan) {
-              // Delete message
-              try {
-                const msg = await welcomeChan.messages.fetch(data.welcomeMsgId);
-                if (msg) await msg.delete();
-              } catch (e) { console.error("Could not delete welcome message."); }
-              
-              // Hide from Role (The Role Lock)
-              await welcomeChan.permissionOverwrites.create(role.id, { ViewChannel: false });
-              // Hide from Member (The Member Lock)
-              await welcomeChan.permissionOverwrites.create(member.id, { ViewChannel: false });
-            }
-          }
-
-          // 5. DM RULES (Formatted with spacing)
+          // 5. DM RULES
           try {
             const now = new Date();
             const rulesEmbed = new EmbedBuilder()
@@ -229,10 +230,10 @@ client.on(Events.InteractionCreate, async interaction => {
                 iconURL: interaction.guild.iconURL() 
               });
             
-            await member.send({ 
-              content: `✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉\n\u200B`, 
-              embeds: [rulesEmbed] 
-            });
+            // Send accepted message
+            await member.send(`✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉`);
+            // Send rules in separate message for clean spacing
+            await member.send({ embeds: [rulesEmbed] });
           } catch (e) { console.log("DM failed."); }
 
           await interaction.update({ content: `✅ Approved ${cleanName}`, components: [] });
@@ -243,10 +244,10 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // BROADCAST START
+      // BROADCAST (Updated withResponse)
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
-        const response = await interaction.reply({
+        await interaction.reply({
           content: "🎯 Select companies:",
           components: [new ActionRowBuilder().addComponents(dropdown)],
           withResponse: true
