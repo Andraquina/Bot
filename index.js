@@ -161,7 +161,7 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
-    // MODAL
+    // MODAL → PREVIEW
     if (interaction.isModalSubmit()) {
 
       await interaction.deferUpdate();
@@ -188,7 +188,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const buttons = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("back").setLabel("⬅ Back").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("back").setLabel("✏️ Edit").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
       );
 
@@ -220,7 +220,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
 
-      // BACK
+      // ✏️ EDIT (same as back)
       if (interaction.customId === "back") {
 
         const dropdown = await buildDropdown(interaction.guild, data.targets);
