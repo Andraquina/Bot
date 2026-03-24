@@ -24,9 +24,10 @@ const client = new Client({
 
 const session = new Map();
 const guildMemberCache = new Map();
+const lastBroadcast = new Map();
 
 // =========================
-// 🚀 REGISTER COMMAND
+// 🚀 REGISTER COMMANDS
 // =========================
 client.once(Events.ClientReady, async () => {
   console.log('🔥 BOT READY');
@@ -34,7 +35,11 @@ client.once(Events.ClientReady, async () => {
   const commands = [
     new SlashCommandBuilder()
       .setName('broadcast')
-      .setDescription('Send broadcast with dropdown UI')
+      .setDescription('Start broadcast'),
+
+    new SlashCommandBuilder()
+      .setName('setup-broadcast')
+      .setDescription('Create broadcast panel')
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -47,7 +52,7 @@ client.once(Events.ClientReady, async () => {
     { body: commands }
   );
 
-  console.log("✅ Command registered");
+  console.log("✅ Commands registered");
 });
 
 // =========================
@@ -93,8 +98,31 @@ client.on(Events.InteractionCreate, async interaction => {
 
   try {
 
-    // 🚀 START
-    if (interaction.isChatInputCommand() && interaction.commandName === "broadcast") {
+    // =========================
+    // ⚡ SETUP PANEL
+    // =========================
+    if (interaction.isChatInputCommand() && interaction.commandName === "setup-broadcast") {
+
+      const button = new ButtonBuilder()
+        .setCustomId("start_broadcast")
+        .setLabel("📢 Start Broadcast")
+        .setStyle(ButtonStyle.Primary);
+
+      await interaction.reply({
+        content: "📢 **Broadcast Panel**\nClick below to start:",
+        components: [new ActionRowBuilder().addComponents(button)]
+      });
+
+      return;
+    }
+
+    // =========================
+    // 🚀 START (slash or panel)
+    // =========================
+    if (
+      (interaction.isChatInputCommand() && interaction.commandName === "broadcast") ||
+      (interaction.isButton() && interaction.customId === "start_broadcast")
+    ) {
 
       const dropdown = await buildDropdown(interaction.guild);
 
@@ -110,7 +138,9 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
+    // =========================
     // 📌 DROPDOWN → MODAL
+    // =========================
     if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
 
       const data = session.get(interaction.user.id) || {};
@@ -144,10 +174,12 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
+    // =========================
     // 📝 MODAL → PREVIEW
+    // =========================
     if (interaction.isModalSubmit() && interaction.customId === "broadcast_modal") {
 
-      await interaction.deferUpdate(); // silent ack
+      await interaction.deferUpdate();
 
       const data = session.get(interaction.user.id);
       if (!data) return;
@@ -180,6 +212,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const buttons = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("template").setLabel("Use Last").setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId("back").setLabel("⬅ Back").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
       );
@@ -204,22 +237,47 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
+    // =========================
     // 🔘 BUTTONS
+    // =========================
     if (interaction.isButton()) {
 
       const data = session.get(interaction.user.id);
       if (!data) return;
 
-      // ❌ CANCEL
-      if (interaction.customId === "cancel") {
-        session.delete(interaction.user.id);
+      // TEMPLATE
+      if (interaction.customId === "template") {
+
+        const template = lastBroadcast.get(interaction.guild.id);
+
+        if (!template) {
+          return interaction.reply({ content: "❌ No previous broadcast.", ephemeral: true });
+        }
+
+        const dropdown = await buildDropdown(interaction.guild, template.targets);
+
+        session.set(interaction.user.id, {
+          message: data.message,
+          targets: template.targets,
+          messageContent: template.messageContent
+        });
+
         return interaction.update({
-          content: "❌ Cancelled.",
-          components: []
+          content:
+            `📄 **Loaded Template**\n\n` +
+            `🎯 ${template.targets.join(", ")}\n\n` +
+            `💬 ${template.messageContent}`,
+          components: [new ActionRowBuilder().addComponents(dropdown)]
         });
       }
 
-      // ⬅ BACK
+      // CANCEL
+      if (interaction.customId === "cancel") {
+        session.delete(interaction.user.id);
+        return interaction.update({ content: "❌ Cancelled.", components: [] });
+      }
+
+      // BACK
       if (interaction.customId === "back") {
 
         const dropdown = await buildDropdown(interaction.guild, data.targets);
@@ -234,7 +292,7 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
-      // ✅ CONFIRM (WITH PROGRESS)
+      // CONFIRM
       if (interaction.customId === "confirm") {
 
         const { targetMembers, messageContent, delay, targets, message } = data;
@@ -270,7 +328,6 @@ client.on(Events.InteractionCreate, async interaction => {
               failed++;
             }
 
-            // update every 2 users for smooth UX
             if (i % 2 === 0 || i === total) {
               await message.edit({
                 content: `🚀 Sending... (${i}/${total})`,
@@ -287,6 +344,12 @@ client.on(Events.InteractionCreate, async interaction => {
               `❌ Failed: ${failed}\n\n` +
               `💬 ${messageContent}`,
             components: []
+          });
+
+          // SAVE TEMPLATE
+          lastBroadcast.set(interaction.guild.id, {
+            messageContent,
+            targets
           });
 
         }, delay);
