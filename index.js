@@ -1,35 +1,36 @@
 const {
   Client,
   GatewayIntentBits,
-  Events,
-  REST,
-  Routes,
-  SlashCommandBuilder,
   ActionRowBuilder,
-  StringSelectMenuBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ButtonBuilder,
-  ButtonStyle,
+  Events,
+  PermissionsBitField,
+  ChannelType,
+  REST,
+  Routes,
+  SlashCommandBuilder,
+  StringSelectMenuBuilder,
   EmbedBuilder
 } = require('discord.js');
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
   ]
 });
 
 const session = new Map();
 const guildMemberCache = new Map();
 
-// =========================
-// 🚀 REGISTER COMMAND
-// =========================
 client.once(Events.ClientReady, async () => {
-  console.log('🔥 BOT READY');
+  console.log('BOT IS ONLINE');
 
   const commands = [
     new SlashCommandBuilder()
@@ -43,9 +44,8 @@ client.once(Events.ClientReady, async () => {
     Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
     { body: commands }
   );
-
-  console.log("✅ Commands registered");
 });
+
 
 // =========================
 // 🧠 HELPERS
@@ -54,10 +54,85 @@ function normalize(str) {
   return str.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+function extractKeywords(str) {
+  return str.toLowerCase().split(/\s+/);
+}
+
+function formatWords(str) {
+  return str
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(w => w.length > 0)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function getAcronym(company) {
+  const words = company.toLowerCase().split(/\s+/);
+  if (words.length === 1) return company;
+  return words.map(w => w[0].toUpperCase()).join('');
+}
+
 function isSameCompany(a, b) {
   const na = normalize(a);
   const nb = normalize(b);
-  return na.includes(nb) || nb.includes(na);
+
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+
+  const acA = getAcronym(a).toLowerCase();
+  const acB = getAcronym(b).toLowerCase();
+
+  if (acA === nb || acB === na) return true;
+
+  const wordsA = extractKeywords(a);
+  const wordsB = extractKeywords(b);
+
+  const common = wordsA.filter(w => wordsB.includes(w));
+
+  return common.length >= Math.min(wordsA.length, wordsB.length) / 2;
+}
+
+function safeCompanyId(str) {
+  return str.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+}
+
+
+// =========================
+// 👋 JOIN SYSTEM
+// =========================
+client.on(Events.GuildMemberAdd, async member => {
+
+  const channel = member.guild.channels.cache.find(c => c.name === "welcome");
+  if (!channel) return;
+
+  const button = new ButtonBuilder()
+    .setCustomId('open_form')
+    .setLabel('Start Setup')
+    .setStyle(ButtonStyle.Primary);
+
+  const row = new ActionRowBuilder().addComponents(button);
+
+  await channel.send({
+    content: `<@${member.id}> Welcome! Click below to get started:`,
+    components: [row]
+  });
+});
+
+
+// =========================
+// 📢 BROADCAST PANEL
+// =========================
+async function createPanel(channel) {
+  const button = new ButtonBuilder()
+    .setCustomId("start_broadcast")
+    .setLabel("📢 Start Broadcast")
+    .setStyle(ButtonStyle.Primary);
+
+  return await channel.send({
+    content: "📢 **Broadcast Panel**\nClick below to start:",
+    components: [new ActionRowBuilder().addComponents(button)]
+  });
 }
 
 async function buildDropdown(guild, selected = []) {
@@ -83,37 +158,24 @@ async function buildDropdown(guild, selected = []) {
     ]);
 }
 
-async function createPanel(channel) {
-  const button = new ButtonBuilder()
-    .setCustomId("start_broadcast")
-    .setLabel("📢 Start Broadcast")
-    .setStyle(ButtonStyle.Primary);
-
-  return await channel.send({
-    content: "📢 **Broadcast Panel**\nClick below to start:",
-    components: [new ActionRowBuilder().addComponents(button)]
-  });
-}
 
 // =========================
-// 📋 INTERACTIONS
+// 📋 INTERACTIONS (ALL IN ONE)
 // =========================
 client.on(Events.InteractionCreate, async interaction => {
-
   try {
 
-    // SETUP PANEL
+    // =========================
+    // 📢 SETUP PANEL
+    // =========================
     if (interaction.isChatInputCommand() && interaction.commandName === "setup-broadcast") {
-
       await createPanel(interaction.channel);
-
-      return interaction.reply({
-        content: "✅ Panel created. (Tip: pin it)",
-        ephemeral: true
-      });
+      return interaction.reply({ content: "✅ Panel created", ephemeral: true });
     }
 
-    // START
+    // =========================
+    // START BROADCAST
+    // =========================
     if (interaction.isButton() && interaction.customId === "start_broadcast") {
 
       const dropdown = await buildDropdown(interaction.guild);
@@ -127,7 +189,9 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
+    // =========================
     // DROPDOWN
+    // =========================
     if (interaction.isStringSelectMenu()) {
 
       const data = session.get(interaction.user.id) || {};
@@ -147,13 +211,6 @@ client.on(Events.InteractionCreate, async interaction => {
             .setCustomId("message")
             .setLabel("Message")
             .setStyle(TextInputStyle.Paragraph)
-        ),
-        new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId("delay")
-            .setLabel("Delay (10m optional)")
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
         )
       );
 
@@ -161,8 +218,10 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
-    // MODAL → PREVIEW
-    if (interaction.isModalSubmit()) {
+    // =========================
+    // BROADCAST MODAL
+    // =========================
+    if (interaction.isModalSubmit() && interaction.customId === "broadcast_modal") {
 
       await interaction.deferUpdate();
 
@@ -180,10 +239,8 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const targetMembers = members.filter(m =>
         !m.user.bot &&
-        (
-          targets.includes("all") ||
-          m.roles.cache.some(r => targets.some(t => isSameCompany(r.name, t)))
-        )
+        (targets.includes("all") ||
+          m.roles.cache.some(r => targets.some(t => isSameCompany(r.name, t))))
       );
 
       const buttons = new ActionRowBuilder().addComponents(
@@ -194,10 +251,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await data.message.edit({
         content:
-          `📢 **Preview**\n\n` +
-          `🎯 Targets: ${targets.join(", ")}\n` +
-          `👥 Users: ${targetMembers.size}\n\n` +
-          `💬 ${messageContent}`,
+          `📢 **Preview**\n\n🎯 ${targets.join(", ")}\n👥 ${targetMembers.size}\n\n💬 ${messageContent}`,
         components: [buttons]
       });
 
@@ -208,26 +262,20 @@ client.on(Events.InteractionCreate, async interaction => {
       });
     }
 
-    // BUTTONS
+    // =========================
+    // BUTTONS (BROADCAST)
+    // =========================
     if (interaction.isButton()) {
 
       const data = session.get(interaction.user.id);
-      if (!data) return;
 
-      // CANCEL
       if (interaction.customId === "cancel") {
         session.delete(interaction.user.id);
         return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
 
-      // ✏️ EDIT (same as back)
       if (interaction.customId === "back") {
-
         const dropdown = await buildDropdown(interaction.guild, data.targets);
-
-        session.set(interaction.user.id, {
-          message: data.message
-        });
 
         return interaction.update({
           content: "🎯 Select companies:",
@@ -235,7 +283,6 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
-      // CONFIRM
       if (interaction.customId === "confirm") {
 
         const { targetMembers, messageContent, message, targets } = data;
@@ -245,19 +292,16 @@ client.on(Events.InteractionCreate, async interaction => {
           components: []
         });
 
-        let i = 0;
-        let success = 0;
-        let failed = 0;
+        let i = 0, success = 0, failed = 0;
 
         for (const member of targetMembers.values()) {
           i++;
-
           try {
             await member.send({
               embeds: [
                 new EmbedBuilder()
-                  .setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db)
-                  .setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update")
+                  .setColor(0x3498db)
+                  .setTitle("📢 Company Update")
                   .setDescription(messageContent)
                   .setFooter({ text: "Inter Molds, Inc." })
                   .setTimestamp()
@@ -277,11 +321,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         await message.edit({
           content:
-            `✅ **Broadcast Completed**\n\n` +
-            `🎯 Targets: ${targets.join(", ")}\n` +
-            `👥 Sent: ${success}\n` +
-            `❌ Failed: ${failed}\n\n` +
-            `💬 ${messageContent}`
+            `✅ **Broadcast Completed**\n\n🎯 ${targets.join(", ")}\n👥 ${success}\n❌ ${failed}\n\n💬 ${messageContent}`
         });
 
         session.delete(interaction.user.id);
@@ -289,7 +329,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
   } catch (err) {
-    console.error(err);
+    console.error("ERROR:", err);
   }
 });
 
