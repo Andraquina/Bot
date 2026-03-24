@@ -113,7 +113,6 @@ client.on(Events.GuildMemberAdd, async member => {
       components: [row]
     });
     onboardingData.set(member.id, { welcomeMsgId: welcomeMsg.id, welcomeChannelId: channel.id });
-    console.log(`✅ Welcome message sent to ${member.user.tag}`);
   } catch (err) { console.error(err); }
 });
 
@@ -163,7 +162,7 @@ client.on(Events.InteractionCreate, async interaction => {
           try { await member.setNickname(`${cleanName} | ${acronym}`); } catch (e) {}
 
           let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, cleanCompany));
-          if (!role) role = await interaction.guild.roles.create({ name: cleanCompany, color: 0x3498db });
+          if (!role) role = await interaction.guild.roles.create({ name: cleanCompany });
           await member.roles.add(role);
 
           const category = await interaction.guild.channels.create({
@@ -175,7 +174,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Text Channel Permissions
+          // Text Channel Permissions - Stable Flags Only
           await interaction.guild.channels.create({
             name: `general`,
             type: ChannelType.GuildText,
@@ -187,15 +186,11 @@ client.on(Events.InteractionCreate, async interaction => {
                 allow: [
                   PermissionsBitField.Flags.ViewChannel,
                   PermissionsBitField.Flags.SendMessages,
-                  PermissionsBitField.Flags.SendMessagesInThreads,
-                  PermissionsBitField.Flags.CreatePublicThreads,
                   PermissionsBitField.Flags.EmbedLinks,
                   PermissionsBitField.Flags.AttachFiles,
                   PermissionsBitField.Flags.AddReactions,
-                  PermissionsBitField.Flags.UseExternalStickers,
-                  PermissionsBitField.Flags.PinMessages,
+                  PermissionsBitField.Flags.UseExternalEmojis,
                   PermissionsBitField.Flags.ReadMessageHistory,
-                  PermissionsBitField.Flags.SendTTSMessages,
                   PermissionsBitField.Flags.SendVoiceMessages,
                   PermissionsBitField.Flags.CreatePolls
                 ]
@@ -203,7 +198,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Voice Call Permissions
+          // Voice Call Permissions - Stable Flags Only
           await interaction.guild.channels.create({
             name: `Voice Call`,
             type: ChannelType.GuildVoice,
@@ -217,23 +212,14 @@ client.on(Events.InteractionCreate, async interaction => {
                   PermissionsBitField.Flags.Connect,
                   PermissionsBitField.Flags.Speak,
                   PermissionsBitField.Flags.Stream,
-                  PermissionsBitField.Flags.UseVAD,
-                  PermissionsBitField.Flags.PrioritySpeaker,
                   PermissionsBitField.Flags.SendMessages,
-                  PermissionsBitField.Flags.EmbedLinks,
-                  PermissionsBitField.Flags.AttachFiles,
-                  PermissionsBitField.Flags.AddReactions,
-                  PermissionsBitField.Flags.UseExternalEmojis,
-                  PermissionsBitField.Flags.UseExternalStickers,
-                  PermissionsBitField.Flags.ReadMessageHistory,
-                  PermissionsBitField.Flags.SendTTSMessages,
-                  PermissionsBitField.Flags.SendVoiceMessages,
-                  PermissionsBitField.Flags.CreatePolls
+                  PermissionsBitField.Flags.ReadMessageHistory
                 ]
               }
             ]
           });
 
+          // Cleanup Welcome
           if (data.welcomeMsgId && data.welcomeChannelId) {
             const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
             if (welcomeChan) {
@@ -257,7 +243,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // Start Broadcast Original Logic
+      // Broadcast Flow (Original logic)
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         const msg = await interaction.reply({
@@ -271,17 +257,14 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const bData = session.get(interaction.user.id);
       if (!bData) return;
-
       if (interaction.customId === "cancel") {
         session.delete(interaction.user.id);
         return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
-
       if (interaction.customId === "back") {
         const dropdown = await buildDropdown(interaction.guild, bData.targets);
         return interaction.update({ content: "🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)] });
       }
-
       if (interaction.customId === "confirm") {
         const { targetMembers, messageContent, message, targets } = bData;
         await interaction.update({ content: `🚀 Sending... (0/${targetMembers.size})`, components: [] });
@@ -313,10 +296,8 @@ client.on(Events.InteractionCreate, async interaction => {
         const company = interaction.fields.getTextInputValue('company_name');
         const current = onboardingData.get(interaction.user.id) || {};
         onboardingData.set(interaction.user.id, { ...current, name, company });
-
         const adminChan = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("admin") && c.type === ChannelType.GuildText);
-        if (!adminChan) return interaction.reply({ content: "Error: No admin text channel found.", flags: [4096] });
-
+        if (!adminChan) return interaction.reply({ content: "Error: No admin channel.", flags: [4096] });
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success),
           new ButtonBuilder().setCustomId(`deny_${interaction.user.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger)
@@ -340,7 +321,7 @@ client.on(Events.InteractionCreate, async interaction => {
         session.set(interaction.user.id, { ...data, messageContent: text, targetMembers });
       }
     }
-  } catch (err) { console.error("Critical Interaction Error:", err); }
+  } catch (err) { console.error(err); }
 });
 
 client.on(Events.MessageCreate, async (message) => {
