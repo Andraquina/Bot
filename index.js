@@ -88,7 +88,7 @@ async function buildDropdown(guild, selected = []) {
 }
 
 // =========================
-// 📌 CREATE PANEL
+// 📌 PANEL
 // =========================
 async function createPanel(channel) {
   const button = new ButtonBuilder()
@@ -301,12 +301,11 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 // =========================
-// 📌 AUTO-STICKY PANEL (FIXED)
+// 🔥 AUTO-STICKY PANEL (WORKING)
 // =========================
 client.on(Events.MessageCreate, async msg => {
 
   if (!panelMessage) return;
-  if (msg.author.bot) return;
   if (msg.channel.id !== panelMessage.channel.id) return;
   if (msg.id === panelMessage.id) return;
 
