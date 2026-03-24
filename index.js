@@ -151,11 +151,14 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // 📝 MODAL → PREVIEW (NO DEFER = NO "THINKING")
+    // 📝 MODAL → PREVIEW (FINAL FIX)
     // =========================
     if (interaction.isModalSubmit() && interaction.customId === "broadcast_modal") {
 
       if (interaction.replied || interaction.deferred) return;
+
+      // ✅ SILENT ACK (NO ERROR, NO "THINKING")
+      await interaction.deferUpdate();
 
       const data = session.get(interaction.user.id);
       if (!data) return;
@@ -170,7 +173,7 @@ client.on(Events.InteractionCreate, async interaction => {
         else if (timeRaw.includes("h")) delay = num * 3600000;
       }
 
-      // MEMBER CACHE (NO RATE LIMIT)
+      // MEMBER CACHE
       let members = guildMemberCache.get(interaction.guild.id);
 
       if (!members) {
