@@ -163,7 +163,7 @@ client.on(Events.InteractionCreate, async interaction => {
           try { await member.setNickname(`${cleanName} | ${acronym}`); } catch (e) {}
 
           let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, cleanCompany));
-          if (!role) role = await interaction.guild.roles.create({ name: cleanCompany }); // Fixed: RoleManager warning
+          if (!role) role = await interaction.guild.roles.create({ name: cleanCompany });
           await member.roles.add(role);
 
           const category = await interaction.guild.channels.create({
@@ -175,7 +175,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Text Channel (Strict Permissions)
+          // Text Channel (general)
           await interaction.guild.channels.create({
             name: `general`,
             type: ChannelType.GuildText,
@@ -203,7 +203,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Voice Call (Strict Permissions)
+          // Voice Channel (Voice Call)
           await interaction.guild.channels.create({
             name: `Voice Call`,
             type: ChannelType.GuildVoice,
@@ -234,7 +234,6 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Cleanup Welcome
           if (data.welcomeMsgId && data.welcomeChannelId) {
             const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
             if (welcomeChan) {
@@ -258,7 +257,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // BROADCAST LOGIC (Untouched)
+      // BROADCAST LOGIC
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         const msg = await interaction.reply({
@@ -313,7 +312,7 @@ client.on(Events.InteractionCreate, async interaction => {
         onboardingData.set(interaction.user.id, { ...current, name, company });
 
         const adminChan = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("admin") && c.type === ChannelType.GuildText);
-        if (!adminChan) return interaction.reply({ content: "Error: No admin channel.", flags: [4096] });
+        if (!adminChan) return interaction.reply({ content: "Error: No admin text channel found.", flags: [4096] });
 
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success),
@@ -338,7 +337,7 @@ client.on(Events.InteractionCreate, async interaction => {
         session.set(interaction.user.id, { ...data, messageContent: text, targetMembers });
       }
     }
-  } catch (err) { console.error("Critical Error:", err); }
+  } catch (err) { console.error("Critical Interaction Error:", err); }
 });
 
 client.on(Events.MessageCreate, async (message) => {
