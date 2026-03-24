@@ -139,7 +139,6 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     if (interaction.isButton()) {
-      // ONBOARDING OPEN MODAL
       if (interaction.customId === 'open_onboarding_modal') {
         const modal = new ModalBuilder().setCustomId('onboarding_modal').setTitle('Company Registration');
         modal.addComponents(
@@ -149,7 +148,6 @@ client.on(Events.InteractionCreate, async interaction => {
         return await interaction.showModal(modal);
       }
 
-      // APPROVAL/DENIAL
       if (interaction.customId.startsWith('approve_') || interaction.customId.startsWith('deny_')) {
         const [action, userId] = interaction.customId.split('_');
         const data = onboardingData.get(userId);
@@ -157,7 +155,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const member = await interaction.guild.members.fetch(userId).catch(() => null);
 
         if (action === 'approve') {
-          if (!member) return interaction.reply({ content: "User left.", flags: [4096] });
+          if (!member) return interaction.reply({ content: "User left server.", flags: [4096] });
           const cleanName = formatTitleCase(data.name);
           const cleanCompany = formatTitleCase(data.company);
           const acronym = getAcronym(cleanCompany);
@@ -165,7 +163,7 @@ client.on(Events.InteractionCreate, async interaction => {
           try { await member.setNickname(`${cleanName} | ${acronym}`); } catch (e) {}
 
           let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, cleanCompany));
-          if (!role) role = await interaction.guild.roles.create({ name: cleanCompany, color: 0x3498db });
+          if (!role) role = await interaction.guild.roles.create({ name: cleanCompany }); // Fixed: RoleManager warning
           await member.roles.add(role);
 
           const category = await interaction.guild.channels.create({
@@ -177,7 +175,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Text Channel (general)
+          // Text Channel (Strict Permissions)
           await interaction.guild.channels.create({
             name: `general`,
             type: ChannelType.GuildText,
@@ -205,7 +203,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Voice Channel (Voice Call)
+          // Voice Call (Strict Permissions)
           await interaction.guild.channels.create({
             name: `Voice Call`,
             type: ChannelType.GuildVoice,
@@ -236,7 +234,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Cleanup Welcome Msg
+          // Cleanup Welcome
           if (data.welcomeMsgId && data.welcomeChannelId) {
             const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
             if (welcomeChan) {
@@ -260,7 +258,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // BROADCAST FLOW
+      // BROADCAST LOGIC (Untouched)
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         const msg = await interaction.reply({
@@ -272,18 +270,18 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      const data = session.get(interaction.user.id);
-      if (!data) return;
+      const bData = session.get(interaction.user.id);
+      if (!bData) return;
       if (interaction.customId === "cancel") {
         session.delete(interaction.user.id);
         return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
       if (interaction.customId === "back") {
-        const dropdown = await buildDropdown(interaction.guild, data.targets);
+        const dropdown = await buildDropdown(interaction.guild, bData.targets);
         return interaction.update({ content: "🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)] });
       }
       if (interaction.customId === "confirm") {
-        const { targetMembers, messageContent, message, targets } = data;
+        const { targetMembers, messageContent, message, targets } = bData;
         await interaction.update({ content: `🚀 Sending... (0/${targetMembers.size})`, components: [] });
         let i = 0; let success = 0;
         for (const m of targetMembers.values()) {
@@ -340,7 +338,7 @@ client.on(Events.InteractionCreate, async interaction => {
         session.set(interaction.user.id, { ...data, messageContent: text, targetMembers });
       }
     }
-  } catch (err) { console.error(err); }
+  } catch (err) { console.error("Critical Error:", err); }
 });
 
 client.on(Events.MessageCreate, async (message) => {
