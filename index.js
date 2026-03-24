@@ -92,14 +92,6 @@ async function buildDropdown(guild, selected = []) {
     ]);
 }
 
-async function createPanel(channel) {
-  const button = new ButtonBuilder().setCustomId("start_broadcast").setLabel("📢 Start Broadcast").setStyle(ButtonStyle.Primary);
-  return await channel.send({
-    content: "📢 **Broadcast Panel**\nClick below to start:",
-    components: [new ActionRowBuilder().addComponents(button)]
-  });
-}
-
 // =========================
 // 👋 ON USER JOIN
 // =========================
@@ -145,12 +137,15 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     if (interaction.isChatInputCommand() && interaction.commandName === "setup-broadcast") {
-      await createPanel(interaction.channel);
+      const button = new ButtonBuilder().setCustomId("start_broadcast").setLabel("📢 Start Broadcast").setStyle(ButtonStyle.Primary);
+      await interaction.channel.send({
+        content: "📢 **Broadcast Panel**\nClick below to start:",
+        components: [new ActionRowBuilder().addComponents(button)]
+      });
       return interaction.reply({ content: "✅ Panel created.", flags: [4096] });
     }
 
     if (interaction.isButton()) {
-      // 1. ONBOARDING MODAL
       if (interaction.customId === 'open_onboarding_modal') {
         const modal = new ModalBuilder().setCustomId('onboarding_modal').setTitle('Company Registration');
         modal.addComponents(
@@ -160,7 +155,6 @@ client.on(Events.InteractionCreate, async interaction => {
         return await interaction.showModal(modal);
       }
 
-      // 2. APPROVAL LOGIC
       if (interaction.customId.startsWith('approve_') || interaction.customId.startsWith('deny_')) {
         const [action, userId] = interaction.customId.split('_');
         const data = onboardingData.get(userId);
@@ -168,7 +162,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const member = await interaction.guild.members.fetch(userId).catch(() => null);
 
         if (action === 'approve') {
-          if (!member) return interaction.reply({ content: "User left.", flags: [4096] });
+          if (!member) return interaction.reply({ content: "User left server.", flags: [4096] });
           const cleanName = formatTitleCase(data.name);
           const cleanCompany = formatTitleCase(data.company);
           const acronym = getAcronym(cleanCompany);
@@ -188,7 +182,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Text Channel (general)
+          // Text Channel Permissions (Corrected Flags)
           await interaction.guild.channels.create({
             name: `general`,
             type: ChannelType.GuildText,
@@ -216,7 +210,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Voice Channel (Voice Call)
+          // Voice Call Permissions (Corrected Flags)
           await interaction.guild.channels.create({
             name: `Voice Call`,
             type: ChannelType.GuildVoice,
@@ -229,7 +223,7 @@ client.on(Events.InteractionCreate, async interaction => {
                   PermissionsBitField.Flags.ViewChannel,
                   PermissionsBitField.Flags.Connect,
                   PermissionsBitField.Flags.Speak,
-                  PermissionsBitField.Flags.Stream,
+                  PermissionsBitField.Flags.Stream, // Official flag for "Video"
                   PermissionsBitField.Flags.UseVAD,
                   PermissionsBitField.Flags.PrioritySpeaker,
                   PermissionsBitField.Flags.SendMessages,
@@ -270,7 +264,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // 3. BROADCAST START (Original logic)
+      // Start Broadcast (Original logic)
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         const msg = await interaction.reply({
@@ -282,38 +276,25 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // 4. BROADCAST CONFIRMATION (Original logic)
+      // Broadcast confirm/cancel
       const data = session.get(interaction.user.id);
       if (!data) return;
-
       if (interaction.customId === "cancel") {
         session.delete(interaction.user.id);
         return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
-
       if (interaction.customId === "back") {
         const dropdown = await buildDropdown(interaction.guild, data.targets);
-        session.set(interaction.user.id, { message: data.message });
-        return interaction.update({
-          content: "🎯 Select companies:",
-          components: [new ActionRowBuilder().addComponents(dropdown)]
-        });
+        return interaction.update({ content: "🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)] });
       }
-
       if (interaction.customId === "confirm") {
         const { targetMembers, messageContent, message, targets } = data;
         await interaction.update({ content: `🚀 Sending... (0/${targetMembers.size})`, components: [] });
-
         let i = 0; let success = 0; let failed = 0;
         for (const m of targetMembers.values()) {
           i++;
           try {
-            await m.send({
-              embeds: [new EmbedBuilder()
-                .setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db)
-                .setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update")
-                .setDescription(messageContent).setFooter({ text: "Inter Molds, Inc." }).setTimestamp()]
-            });
+            await m.send({ embeds: [new EmbedBuilder().setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db).setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update").setDescription(messageContent).setFooter({ text: "Inter Molds, Inc." }).setTimestamp()] });
             success++;
           } catch { failed++; }
           if (i % 2 === 0 || i === targetMembers.size) await message.edit({ content: `🚀 Sending... (${i}/${targetMembers.size})` });
@@ -335,16 +316,13 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     if (interaction.isModalSubmit()) {
-      // 1. Onboarding Submission
       if (interaction.customId === 'onboarding_modal') {
         const name = interaction.fields.getTextInputValue('user_name');
         const company = interaction.fields.getTextInputValue('company_name');
         const current = onboardingData.get(interaction.user.id) || {};
         onboardingData.set(interaction.user.id, { ...current, name, company });
-
         const adminChan = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("admin") && c.type === ChannelType.GuildText);
-        if (!adminChan) return interaction.reply({ content: "Error: No admin channel.", flags: [4096] });
-
+        if (!adminChan) return interaction.reply({ content: "Error: No admin text channel found.", flags: [4096] });
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success),
           new ButtonBuilder().setCustomId(`deny_${interaction.user.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger)
@@ -353,12 +331,11 @@ client.on(Events.InteractionCreate, async interaction => {
         return interaction.reply({ content: "✅ Submitted. Wait for approval.", flags: [4096] });
       }
 
-      // 2. Broadcast Preview (Original logic)
       if (interaction.customId === "broadcast_modal") {
         await interaction.deferUpdate();
         const data = session.get(interaction.user.id);
         if (!data) return;
-        const messageContent = interaction.fields.getTextInputValue("message");
+        const text = interaction.fields.getTextInputValue("message");
         const targets = data.targets;
         let members = guildMemberCache.get(interaction.guild.id);
         if (!members) { members = await interaction.guild.members.fetch(); guildMemberCache.set(interaction.guild.id, members); }
@@ -368,8 +345,8 @@ client.on(Events.InteractionCreate, async interaction => {
           new ButtonBuilder().setCustomId("back").setLabel("✏️ Edit").setStyle(ButtonStyle.Secondary),
           new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
         );
-        await data.message.edit({ content: `📢 **Preview**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Users: ${targetMembers.size}\n\n💬 ${messageContent}`, components: [buttons] });
-        session.set(interaction.user.id, { ...data, messageContent, targetMembers });
+        await data.message.edit({ content: `📢 **Preview**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Users: ${targetMembers.size}\n\n💬 ${text}`, components: [buttons] });
+        session.set(interaction.user.id, { ...data, messageContent: text, targetMembers });
       }
     }
   } catch (err) { console.error(err); }
