@@ -36,7 +36,9 @@ client.once(Events.ClientReady, async () => {
   console.log('🔥 BOT READY');
 
   const commands = [
-    new SlashCommandBuilder().setName('setup-broadcast').setDescription('Create broadcast panel')
+    new SlashCommandBuilder()
+      .setName('setup-broadcast')
+      .setDescription('Create broadcast panel')
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -89,7 +91,6 @@ async function buildDropdown(guild, selected = []) {
 // 📌 CREATE PANEL
 // =========================
 async function createPanel(channel) {
-
   const button = new ButtonBuilder()
     .setCustomId("start_broadcast")
     .setLabel("📢 Start Broadcast")
@@ -150,10 +151,17 @@ client.on(Events.InteractionCreate, async interaction => {
 
       modal.addComponents(
         new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId("message").setLabel("Message").setStyle(TextInputStyle.Paragraph)
+          new TextInputBuilder()
+            .setCustomId("message")
+            .setLabel("Message")
+            .setStyle(TextInputStyle.Paragraph)
         ),
         new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId("delay").setLabel("Delay (10m optional)").setRequired(false).setStyle(TextInputStyle.Short)
+          new TextInputBuilder()
+            .setCustomId("delay")
+            .setLabel("Delay (10m optional)")
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false)
         )
       );
 
@@ -180,8 +188,10 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const targetMembers = members.filter(m =>
         !m.user.bot &&
-        (targets.includes("all") ||
-          m.roles.cache.some(r => targets.some(t => isSameCompany(r.name, t))))
+        (
+          targets.includes("all") ||
+          m.roles.cache.some(r => targets.some(t => isSameCompany(r.name, t)))
+        )
       );
 
       const buttons = new ActionRowBuilder().addComponents(
@@ -193,7 +203,10 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await data.message.edit({
         content:
-          `📢 Preview\n\nTargets: ${targets.join(", ")}\nUsers: ${targetMembers.size}\n\n${messageContent}`,
+          `📢 **Preview**\n\n` +
+          `🎯 Targets: ${targets.join(", ")}\n` +
+          `👥 Users: ${targetMembers.size}\n\n` +
+          `💬 ${messageContent}`,
         components: [buttons]
       });
 
@@ -212,7 +225,20 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (interaction.customId === "cancel") {
         session.delete(interaction.user.id);
-        return interaction.update({ content: "Cancelled.", components: [] });
+        return interaction.update({ content: "❌ Cancelled.", components: [] });
+      }
+
+      if (interaction.customId === "template") {
+        const template = lastBroadcast.get(interaction.guild.id);
+        if (!template) return interaction.reply({ content: "❌ No template.", ephemeral: true });
+
+        return interaction.update({
+          content:
+            `📄 Loaded Template\n\n` +
+            `🎯 ${template.targets.join(", ")}\n\n` +
+            `💬 ${template.messageContent}`,
+          components: []
+        });
       }
 
       if (interaction.customId === "confirm") {
@@ -224,37 +250,48 @@ client.on(Events.InteractionCreate, async interaction => {
           components: []
         });
 
-        let i = 0, success = 0;
+        let i = 0;
+        let success = 0;
+        let failed = 0;
 
         for (const member of targetMembers.values()) {
           i++;
+
           try {
-            await member.send(messageContent);
+            await member.send({
+              embeds: [
+                new EmbedBuilder()
+                  .setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db)
+                  .setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update")
+                  .setDescription(messageContent)
+                  .setFooter({ text: "Inter Molds, Inc." })
+                  .setTimestamp()
+              ]
+            });
             success++;
-          } catch {}
+          } catch {
+            failed++;
+          }
 
           if (i % 2 === 0 || i === targetMembers.size) {
-            await message.edit({ content: `🚀 Sending... (${i}/${targetMembers.size})` });
+            await message.edit({
+              content: `🚀 Sending... (${i}/${targetMembers.size})`
+            });
           }
         }
 
         await message.edit({
           content:
-            `✅ Completed\n\nTargets: ${targets.join(", ")}\nSent: ${success}/${targetMembers.size}\n\n${messageContent}`
+            `✅ **Broadcast Completed**\n\n` +
+            `🎯 Targets: ${targets.join(", ")}\n` +
+            `👥 Sent: ${success}\n` +
+            `❌ Failed: ${failed}\n\n` +
+            `💬 ${messageContent}`,
+          components: []
         });
 
         lastBroadcast.set(interaction.guild.id, { messageContent, targets });
         session.delete(interaction.user.id);
-      }
-
-      if (interaction.customId === "template") {
-        const template = lastBroadcast.get(interaction.guild.id);
-        if (!template) return interaction.reply({ content: "No template", ephemeral: true });
-
-        return interaction.update({
-          content: `Loaded template\n${template.messageContent}`,
-          components: []
-        });
       }
     }
 
@@ -264,13 +301,14 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 // =========================
-// 📌 AUTO-STICKY PANEL
+// 📌 AUTO-STICKY PANEL (FIXED)
 // =========================
 client.on(Events.MessageCreate, async msg => {
 
   if (!panelMessage) return;
   if (msg.author.bot) return;
   if (msg.channel.id !== panelMessage.channel.id) return;
+  if (msg.id === panelMessage.id) return;
 
   try {
     await panelMessage.delete();
