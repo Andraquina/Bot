@@ -32,7 +32,7 @@ const client = new Client({
 // Global States
 const session = new Map();
 const repliedUsers = new Set();
-const onboardingData = new Map();
+const onboardingData = new Map(); // Stores user info, welcome message ID, and channel ID
 
 // =========================
 // 🚀 ON READY & REGISTER
@@ -91,9 +91,15 @@ client.on(Events.GuildMemberAdd, async member => {
     new ButtonBuilder().setCustomId('open_onboarding_modal').setLabel('Start Setup').setStyle(ButtonStyle.Primary)
   );
 
-  await channel.send({
+  const welcomeMsg = await channel.send({
     content: `Welcome <@${member.id}>! To access the server, please click the button below to register.`,
     components: [row]
+  });
+
+  // Store the welcome message metadata
+  onboardingData.set(member.id, { 
+    welcomeMsgId: welcomeMsg.id, 
+    welcomeChannelId: channel.id 
   });
 });
 
@@ -144,20 +150,22 @@ client.on(Events.InteractionCreate, async interaction => {
       if (interaction.customId.startsWith('approve_') || interaction.customId.startsWith('deny_')) {
         const [action, userId] = interaction.customId.split('_');
         const data = onboardingData.get(userId);
+        
         if (!data) return interaction.reply({ content: "Session expired or already handled.", ephemeral: true });
 
         const member = await interaction.guild.members.fetch(userId).catch(() => null);
-        if (!member) return interaction.reply({ content: "User is no longer in the server.", ephemeral: true });
 
         if (action === 'approve') {
-          // Find/Create Role
+          if (!member) return interaction.reply({ content: "User is no longer in the server.", ephemeral: true });
+
+          // 1. Assign Role
           let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, data.company));
           if (!role) {
             role = await interaction.guild.roles.create({ name: data.company, color: 'Blue', reason: 'Onboarding' });
           }
           await member.roles.add(role);
 
-          // Create Category & Channels
+          // 2. Create Category & Channels
           const category = await interaction.guild.channels.create({
             name: data.company.toUpperCase(),
             type: ChannelType.GuildCategory,
@@ -170,19 +178,34 @@ client.on(Events.InteractionCreate, async interaction => {
           await interaction.guild.channels.create({ name: `text-chat`, type: ChannelType.GuildText, parent: category.id });
           await interaction.guild.channels.create({ name: `voice-chat`, type: ChannelType.GuildVoice, parent: category.id });
 
+          // 3. CLEANUP: Delete Welcome Message & Hide Welcome Channel
+          if (data.welcomeMsgId && data.welcomeChannelId) {
+            const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
+            if (welcomeChan) {
+              // Delete the message
+              const msg = await welcomeChan.messages.fetch(data.welcomeMsgId).catch(() => null);
+              if (msg) await msg.delete().catch(() => null);
+              
+              // Hide the channel from the user
+              await welcomeChan.permissionOverwrites.create(member.id, { ViewChannel: false });
+            }
+          }
+
+          // 4. Send Confirmation DM
           try {
-            await member.send(`✅ **Approved!** Welcome to **${data.company}**.\n\n**Rules:**\n1. Be professional.\n2. Respect privacy.`);
+            await member.send(`✅ **Approved!** Welcome to **${data.company}**.\n\n**Rules:**\n1. Be professional.\n2. Respect privacy of company channels.`);
           } catch (e) { console.log("DM failed."); }
 
           await interaction.update({ content: `✅ Approved ${data.name} (${data.company})`, components: [] });
         } else {
           await interaction.update({ content: `❌ Denied ${data.name}`, components: [] });
         }
+        
         onboardingData.delete(userId);
         return;
       }
 
-      // --- BROADCAST: START ---
+      // --- BROADCAST BUTTONS ---
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         const msg = await interaction.reply({ content: "🎯 Select targets:", components: [new ActionRowBuilder().addComponents(dropdown)], fetchReply: true });
@@ -190,10 +213,9 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // --- BROADCAST: CONFIRM/CANCEL ---
       const bData = session.get(interaction.user.id);
       if (interaction.customId === "confirm" && bData) {
-        const { targetMembers, messageContent, message, targets } = bData;
+        const { targetMembers, messageContent, message } = bData;
         await interaction.update({ content: `🚀 Sending...`, components: [] });
         let success = 0;
         for (const m of targetMembers.values()) {
@@ -209,33 +231,33 @@ client.on(Events.InteractionCreate, async interaction => {
 
     // 4. MODALS SUBMIT
     if (interaction.isModalSubmit()) {
-      // ONBOARDING SUBMISSION
       if (interaction.customId === 'onboarding_modal') {
         const name = interaction.fields.getTextInputValue('user_name');
         const company = interaction.fields.getTextInputValue('company_name');
-        onboardingData.set(interaction.user.id, { name, company });
+        
+        // Update stored data with name and company
+        const current = onboardingData.get(interaction.user.id) || {};
+        onboardingData.set(interaction.user.id, { ...current, name, company });
 
-        // FIX: Ensure we find a TEXT channel, not a category
         const adminChan = interaction.guild.channels.cache.find(c => 
-          c.name.toLowerCase().includes("admin") && 
-          c.type === ChannelType.GuildText
+          c.name.toLowerCase().includes("admin") && c.type === ChannelType.GuildText
         );
 
-        if (!adminChan) {
-          console.error("❌ Admin text channel not found.");
-          return interaction.reply({ content: "Error: No admin text channel found.", ephemeral: true });
-        }
+        if (!adminChan) return interaction.reply({ content: "Error: No admin text channel found.", ephemeral: true });
 
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success),
           new ButtonBuilder().setCustomId(`deny_${interaction.user.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger)
         );
 
-        await adminChan.send({ content: `🔔 **New Request**\n**User:** <@${interaction.user.id}>\n**Name:** ${name}\n**Company:** ${company}`, components: [row] });
-        return interaction.reply({ content: "✅ Submitted. Wait for approval.", ephemeral: true });
+        await adminChan.send({ 
+          content: `🔔 **New Registration Request**\n**User:** <@${interaction.user.id}>\n**Name:** ${name}\n**Company:** ${company}`, 
+          components: [row] 
+        });
+        
+        return interaction.reply({ content: "✅ Submitted. Please wait for an admin to approve your access.", ephemeral: true });
       }
 
-      // BROADCAST SUBMISSION
       if (interaction.customId === "broadcast_modal") {
         await interaction.deferUpdate();
         const data = session.get(interaction.user.id);
@@ -253,7 +275,7 @@ client.on(Events.InteractionCreate, async interaction => {
       }
     }
 
-    // 5. SELECT MENU (Broadcast)
+    // 5. SELECT MENU
     if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
       session.set(interaction.user.id, { ...session.get(interaction.user.id), targets: interaction.values });
       const modal = new ModalBuilder().setCustomId("broadcast_modal").setTitle("Message");
@@ -261,7 +283,7 @@ client.on(Events.InteractionCreate, async interaction => {
       await interaction.showModal(modal);
     }
 
-  } catch (err) { console.error(err); }
+  } catch (err) { console.error("Interaction Error:", err); }
 });
 
 client.login(process.env.TOKEN);
