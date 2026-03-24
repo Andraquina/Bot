@@ -175,7 +175,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Text Channel (general)
+          // Text Channel Permissions (FIXED FLAGS)
           await interaction.guild.channels.create({
             name: `general`,
             type: ChannelType.GuildText,
@@ -203,7 +203,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Voice Channel (Voice Call)
+          // Voice Call Permissions (FIXED FLAGS)
           await interaction.guild.channels.create({
             name: `Voice Call`,
             type: ChannelType.GuildVoice,
@@ -257,7 +257,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // BROADCAST LOGIC
+      // BROADCAST START
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         const msg = await interaction.reply({
@@ -337,7 +337,7 @@ client.on(Events.InteractionCreate, async interaction => {
         session.set(interaction.user.id, { ...data, messageContent: text, targetMembers });
       }
     }
-  } catch (err) { console.error("Critical Interaction Error:", err); }
+  } catch (err) { console.error("Final Debug Error:", err); }
 });
 
 client.on(Events.MessageCreate, async (message) => {
