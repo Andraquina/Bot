@@ -150,6 +150,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     if (interaction.isButton()) {
+      // 1. ONBOARDING MODAL
       if (interaction.customId === 'open_onboarding_modal') {
         const modal = new ModalBuilder().setCustomId('onboarding_modal').setTitle('Company Registration');
         modal.addComponents(
@@ -159,6 +160,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return await interaction.showModal(modal);
       }
 
+      // 2. APPROVAL LOGIC
       if (interaction.customId.startsWith('approve_') || interaction.customId.startsWith('deny_')) {
         const [action, userId] = interaction.customId.split('_');
         const data = onboardingData.get(userId);
@@ -167,7 +169,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
         if (action === 'approve') {
           if (!member) return interaction.reply({ content: "User left.", flags: [4096] });
-          
           const cleanName = formatTitleCase(data.name);
           const cleanCompany = formatTitleCase(data.company);
           const acronym = getAcronym(cleanCompany);
@@ -187,7 +188,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Text Channel Permissions
+          // Text Channel (general)
           await interaction.guild.channels.create({
             name: `general`,
             type: ChannelType.GuildText,
@@ -215,7 +216,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Voice Call Permissions
+          // Voice Channel (Voice Call)
           await interaction.guild.channels.create({
             name: `Voice Call`,
             type: ChannelType.GuildVoice,
@@ -269,6 +270,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
+      // 3. BROADCAST START (Original logic)
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         const msg = await interaction.reply({
@@ -280,6 +282,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
+      // 4. BROADCAST CONFIRMATION (Original logic)
       const data = session.get(interaction.user.id);
       if (!data) return;
 
@@ -332,6 +335,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     if (interaction.isModalSubmit()) {
+      // 1. Onboarding Submission
       if (interaction.customId === 'onboarding_modal') {
         const name = interaction.fields.getTextInputValue('user_name');
         const company = interaction.fields.getTextInputValue('company_name');
@@ -349,6 +353,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return interaction.reply({ content: "✅ Submitted. Wait for approval.", flags: [4096] });
       }
 
+      // 2. Broadcast Preview (Original logic)
       if (interaction.customId === "broadcast_modal") {
         await interaction.deferUpdate();
         const data = session.get(interaction.user.id);
