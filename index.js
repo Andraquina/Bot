@@ -113,6 +113,7 @@ client.on(Events.GuildMemberAdd, async member => {
       components: [row]
     });
     onboardingData.set(member.id, { welcomeMsgId: welcomeMsg.id, welcomeChannelId: channel.id });
+    console.log(`✅ Welcome message sent to ${member.user.tag}`);
   } catch (err) { console.error(err); }
 });
 
@@ -123,10 +124,8 @@ client.on(Events.InteractionCreate, async interaction => {
   try {
     if (interaction.isAutocomplete()) {
       const focused = interaction.options.getFocused() || "";
-      const parts = focused.split(";");
-      const current = parts[parts.length - 1].trim().toLowerCase();
       const roles = interaction.guild.roles.cache.filter(r => r.name !== "@everyone").map(r => r.name);
-      const suggestions = roles.filter(r => r.toLowerCase().includes(current)).slice(0, 25);
+      const suggestions = roles.filter(r => r.toLowerCase().includes(focused.toLowerCase())).slice(0, 25);
       return await interaction.respond(suggestions.map(s => ({ name: s, value: s })));
     }
 
@@ -140,6 +139,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     if (interaction.isButton()) {
+      // ONBOARDING OPEN MODAL
       if (interaction.customId === 'open_onboarding_modal') {
         const modal = new ModalBuilder().setCustomId('onboarding_modal').setTitle('Company Registration');
         modal.addComponents(
@@ -149,6 +149,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return await interaction.showModal(modal);
       }
 
+      // APPROVAL/DENIAL
       if (interaction.customId.startsWith('approve_') || interaction.customId.startsWith('deny_')) {
         const [action, userId] = interaction.customId.split('_');
         const data = onboardingData.get(userId);
@@ -176,7 +177,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Text Channel Permissions
+          // Text Channel (general)
           await interaction.guild.channels.create({
             name: `general`,
             type: ChannelType.GuildText,
@@ -204,7 +205,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Voice Call Permissions
+          // Voice Channel (Voice Call)
           await interaction.guild.channels.create({
             name: `Voice Call`,
             type: ChannelType.GuildVoice,
@@ -235,7 +236,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Cleanup Welcome
+          // Cleanup Welcome Msg
           if (data.welcomeMsgId && data.welcomeChannelId) {
             const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
             if (welcomeChan) {
@@ -259,6 +260,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
+      // BROADCAST FLOW
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         const msg = await interaction.reply({
