@@ -18,13 +18,16 @@ const {
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages
   ]
 });
 
 const session = new Map();
 const guildMemberCache = new Map();
 const lastBroadcast = new Map();
+
+let panelMessage = null;
 
 // =========================
 // 🚀 REGISTER COMMANDS
@@ -33,22 +36,13 @@ client.once(Events.ClientReady, async () => {
   console.log('🔥 BOT READY');
 
   const commands = [
-    new SlashCommandBuilder()
-      .setName('broadcast')
-      .setDescription('Start broadcast'),
-
-    new SlashCommandBuilder()
-      .setName('setup-broadcast')
-      .setDescription('Create broadcast panel')
+    new SlashCommandBuilder().setName('setup-broadcast').setDescription('Create broadcast panel')
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
   await rest.put(
-    Routes.applicationGuildCommands(
-      process.env.CLIENT_ID,
-      process.env.GUILD_ID
-    ),
+    Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
     { body: commands }
   );
 
@@ -92,37 +86,42 @@ async function buildDropdown(guild, selected = []) {
 }
 
 // =========================
+// 📌 CREATE PANEL
+// =========================
+async function createPanel(channel) {
+
+  const button = new ButtonBuilder()
+    .setCustomId("start_broadcast")
+    .setLabel("📢 Start Broadcast")
+    .setStyle(ButtonStyle.Primary);
+
+  return await channel.send({
+    content: "📢 **Broadcast Panel**\nClick below to start:",
+    components: [new ActionRowBuilder().addComponents(button)]
+  });
+}
+
+// =========================
 // 📋 INTERACTIONS
 // =========================
 client.on(Events.InteractionCreate, async interaction => {
 
   try {
 
-    // =========================
-    // ⚡ SETUP PANEL
-    // =========================
+    // SETUP PANEL
     if (interaction.isChatInputCommand() && interaction.commandName === "setup-broadcast") {
 
-      const button = new ButtonBuilder()
-        .setCustomId("start_broadcast")
-        .setLabel("📢 Start Broadcast")
-        .setStyle(ButtonStyle.Primary);
+      if (panelMessage) {
+        try { await panelMessage.delete(); } catch {}
+      }
 
-      await interaction.reply({
-        content: "📢 **Broadcast Panel**\nClick below to start:",
-        components: [new ActionRowBuilder().addComponents(button)]
-      });
+      panelMessage = await createPanel(interaction.channel);
 
-      return;
+      return interaction.reply({ content: "✅ Panel created.", ephemeral: true });
     }
 
-    // =========================
-    // 🚀 START (slash or panel)
-    // =========================
-    if (
-      (interaction.isChatInputCommand() && interaction.commandName === "broadcast") ||
-      (interaction.isButton() && interaction.customId === "start_broadcast")
-    ) {
+    // START
+    if (interaction.isButton() && interaction.customId === "start_broadcast") {
 
       const dropdown = await buildDropdown(interaction.guild);
 
@@ -131,17 +130,12 @@ client.on(Events.InteractionCreate, async interaction => {
         components: [new ActionRowBuilder().addComponents(dropdown)]
       });
 
-      session.set(interaction.user.id, {
-        message: msg
-      });
-
+      session.set(interaction.user.id, { message: msg });
       return;
     }
 
-    // =========================
-    // 📌 DROPDOWN → MODAL
-    // =========================
-    if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
+    // DROPDOWN
+    if (interaction.isStringSelectMenu()) {
 
       const data = session.get(interaction.user.id) || {};
 
@@ -156,17 +150,10 @@ client.on(Events.InteractionCreate, async interaction => {
 
       modal.addComponents(
         new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId("message")
-            .setLabel("Message")
-            .setStyle(TextInputStyle.Paragraph)
+          new TextInputBuilder().setCustomId("message").setLabel("Message").setStyle(TextInputStyle.Paragraph)
         ),
         new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId("delay")
-            .setLabel("Delay (10m, 1h optional)")
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
+          new TextInputBuilder().setCustomId("delay").setLabel("Delay (10m optional)").setRequired(false).setStyle(TextInputStyle.Short)
         )
       );
 
@@ -174,10 +161,8 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
-    // =========================
-    // 📝 MODAL → PREVIEW
-    // =========================
-    if (interaction.isModalSubmit() && interaction.customId === "broadcast_modal") {
+    // MODAL
+    if (interaction.isModalSubmit()) {
 
       await interaction.deferUpdate();
 
@@ -185,14 +170,7 @@ client.on(Events.InteractionCreate, async interaction => {
       if (!data) return;
 
       const messageContent = interaction.fields.getTextInputValue("message");
-      const timeRaw = interaction.fields.getTextInputValue("delay");
-
-      let delay = 0;
-      if (timeRaw) {
-        const num = parseInt(timeRaw);
-        if (timeRaw.includes("m")) delay = num * 60000;
-        else if (timeRaw.includes("h")) delay = num * 3600000;
-      }
+      const targets = data.targets;
 
       let members = guildMemberCache.get(interaction.guild.id);
       if (!members) {
@@ -200,167 +178,105 @@ client.on(Events.InteractionCreate, async interaction => {
         guildMemberCache.set(interaction.guild.id, members);
       }
 
-      const targets = data.targets;
-
       const targetMembers = members.filter(m =>
         !m.user.bot &&
-        (
-          targets.includes("all") ||
-          m.roles.cache.some(r => targets.some(t => isSameCompany(r.name, t)))
-        )
+        (targets.includes("all") ||
+          m.roles.cache.some(r => targets.some(t => isSameCompany(r.name, t))))
       );
 
       const buttons = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId("template").setLabel("Use Last").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("back").setLabel("⬅ Back").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("back").setLabel("Back").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
       );
 
       await data.message.edit({
         content:
-          `📢 **Preview**\n\n` +
-          `🎯 Targets: ${targets.join(", ")}\n` +
-          `👥 Users: ${targetMembers.size}\n` +
-          `⏱️ Delay: ${timeRaw || "none"}\n\n` +
-          `💬 ${messageContent}`,
+          `📢 Preview\n\nTargets: ${targets.join(", ")}\nUsers: ${targetMembers.size}\n\n${messageContent}`,
         components: [buttons]
       });
 
       session.set(interaction.user.id, {
         ...data,
         messageContent,
-        delay,
         targetMembers
       });
-
-      return;
     }
 
-    // =========================
-    // 🔘 BUTTONS
-    // =========================
+    // BUTTONS
     if (interaction.isButton()) {
 
       const data = session.get(interaction.user.id);
       if (!data) return;
 
-      // TEMPLATE
-      if (interaction.customId === "template") {
-
-        const template = lastBroadcast.get(interaction.guild.id);
-
-        if (!template) {
-          return interaction.reply({ content: "❌ No previous broadcast.", ephemeral: true });
-        }
-
-        const dropdown = await buildDropdown(interaction.guild, template.targets);
-
-        session.set(interaction.user.id, {
-          message: data.message,
-          targets: template.targets,
-          messageContent: template.messageContent
-        });
-
-        return interaction.update({
-          content:
-            `📄 **Loaded Template**\n\n` +
-            `🎯 ${template.targets.join(", ")}\n\n` +
-            `💬 ${template.messageContent}`,
-          components: [new ActionRowBuilder().addComponents(dropdown)]
-        });
-      }
-
-      // CANCEL
       if (interaction.customId === "cancel") {
         session.delete(interaction.user.id);
-        return interaction.update({ content: "❌ Cancelled.", components: [] });
+        return interaction.update({ content: "Cancelled.", components: [] });
       }
 
-      // BACK
-      if (interaction.customId === "back") {
-
-        const dropdown = await buildDropdown(interaction.guild, data.targets);
-
-        session.set(interaction.user.id, {
-          message: data.message
-        });
-
-        return interaction.update({
-          content: "🎯 Select companies:",
-          components: [new ActionRowBuilder().addComponents(dropdown)]
-        });
-      }
-
-      // CONFIRM
       if (interaction.customId === "confirm") {
 
-        const { targetMembers, messageContent, delay, targets, message } = data;
+        const { targetMembers, messageContent, message, targets } = data;
 
         await interaction.update({
           content: `🚀 Sending... (0/${targetMembers.size})`,
           components: []
         });
 
-        setTimeout(async () => {
+        let i = 0, success = 0;
 
-          let success = 0;
-          let failed = 0;
-          let i = 0;
-          const total = targetMembers.size;
+        for (const member of targetMembers.values()) {
+          i++;
+          try {
+            await member.send(messageContent);
+            success++;
+          } catch {}
 
-          for (const member of targetMembers.values()) {
-            i++;
-
-            try {
-              await member.send({
-                embeds: [
-                  new EmbedBuilder()
-                    .setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db)
-                    .setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update")
-                    .setDescription(messageContent)
-                    .setFooter({ text: "Inter Molds, Inc." })
-                    .setTimestamp()
-                ]
-              });
-              success++;
-            } catch {
-              failed++;
-            }
-
-            if (i % 2 === 0 || i === total) {
-              await message.edit({
-                content: `🚀 Sending... (${i}/${total})`,
-                components: []
-              });
-            }
+          if (i % 2 === 0 || i === targetMembers.size) {
+            await message.edit({ content: `🚀 Sending... (${i}/${targetMembers.size})` });
           }
+        }
 
-          await message.edit({
-            content:
-              `✅ **Broadcast Completed**\n\n` +
-              `🎯 Targets: ${targets.join(", ")}\n` +
-              `👥 Sent: ${success}\n` +
-              `❌ Failed: ${failed}\n\n` +
-              `💬 ${messageContent}`,
-            components: []
-          });
+        await message.edit({
+          content:
+            `✅ Completed\n\nTargets: ${targets.join(", ")}\nSent: ${success}/${targetMembers.size}\n\n${messageContent}`
+        });
 
-          // SAVE TEMPLATE
-          lastBroadcast.set(interaction.guild.id, {
-            messageContent,
-            targets
-          });
-
-        }, delay);
-
+        lastBroadcast.set(interaction.guild.id, { messageContent, targets });
         session.delete(interaction.user.id);
+      }
+
+      if (interaction.customId === "template") {
+        const template = lastBroadcast.get(interaction.guild.id);
+        if (!template) return interaction.reply({ content: "No template", ephemeral: true });
+
+        return interaction.update({
+          content: `Loaded template\n${template.messageContent}`,
+          components: []
+        });
       }
     }
 
   } catch (err) {
-    console.error("ERROR:", err);
+    console.error(err);
   }
+});
+
+// =========================
+// 📌 AUTO-STICKY PANEL
+// =========================
+client.on(Events.MessageCreate, async msg => {
+
+  if (!panelMessage) return;
+  if (msg.author.bot) return;
+  if (msg.channel.id !== panelMessage.channel.id) return;
+
+  try {
+    await panelMessage.delete();
+  } catch {}
+
+  panelMessage = await createPanel(msg.channel);
 });
 
 client.login(process.env.TOKEN);
