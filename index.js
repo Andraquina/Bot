@@ -163,7 +163,7 @@ client.on(Events.InteractionCreate, async interaction => {
           try { await member.setNickname(`${cleanName} | ${acronym}`); } catch (e) {}
 
           let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, cleanCompany));
-          if (!role) role = await interaction.guild.roles.create({ name: cleanCompany });
+          if (!role) role = await interaction.guild.roles.create({ name: cleanCompany, color: 0x3498db });
           await member.roles.add(role);
 
           const category = await interaction.guild.channels.create({
@@ -175,7 +175,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Text Channel Permissions (FIXED FLAGS)
+          // Text Channel Permissions
           await interaction.guild.channels.create({
             name: `general`,
             type: ChannelType.GuildText,
@@ -203,7 +203,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Voice Call Permissions (FIXED FLAGS)
+          // Voice Call Permissions
           await interaction.guild.channels.create({
             name: `Voice Call`,
             type: ChannelType.GuildVoice,
@@ -257,7 +257,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // BROADCAST START
+      // Start Broadcast Original Logic
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         const msg = await interaction.reply({
@@ -271,14 +271,17 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const bData = session.get(interaction.user.id);
       if (!bData) return;
+
       if (interaction.customId === "cancel") {
         session.delete(interaction.user.id);
         return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
+
       if (interaction.customId === "back") {
         const dropdown = await buildDropdown(interaction.guild, bData.targets);
         return interaction.update({ content: "🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)] });
       }
+
       if (interaction.customId === "confirm") {
         const { targetMembers, messageContent, message, targets } = bData;
         await interaction.update({ content: `🚀 Sending... (0/${targetMembers.size})`, components: [] });
@@ -337,7 +340,7 @@ client.on(Events.InteractionCreate, async interaction => {
         session.set(interaction.user.id, { ...data, messageContent: text, targetMembers });
       }
     }
-  } catch (err) { console.error("Final Debug Error:", err); }
+  } catch (err) { console.error("Critical Interaction Error:", err); }
 });
 
 client.on(Events.MessageCreate, async (message) => {
