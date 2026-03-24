@@ -18,8 +18,7 @@ const {
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages
+    GatewayIntentBits.GuildMembers
   ]
 });
 
@@ -109,13 +108,12 @@ client.on(Events.InteractionCreate, async interaction => {
     // SETUP PANEL
     if (interaction.isChatInputCommand() && interaction.commandName === "setup-broadcast") {
 
-      if (panelMessage) {
-        try { await panelMessage.delete(); } catch {}
-      }
-
       panelMessage = await createPanel(interaction.channel);
 
-      return interaction.reply({ content: "✅ Panel created.", ephemeral: true });
+      return interaction.reply({
+        content: "✅ Panel created. (Tip: pin it for easy access)",
+        ephemeral: true
+      });
     }
 
     // START
@@ -224,6 +222,19 @@ client.on(Events.InteractionCreate, async interaction => {
         return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
 
+      if (interaction.customId === "template") {
+        const template = lastBroadcast.get(interaction.guild.id);
+        if (!template) return interaction.reply({ content: "❌ No template.", ephemeral: true });
+
+        return interaction.update({
+          content:
+            `📄 Loaded Template\n\n` +
+            `🎯 ${template.targets.join(", ")}\n\n` +
+            `💬 ${template.messageContent}`,
+          components: []
+        });
+      }
+
       if (interaction.customId === "confirm") {
 
         const { targetMembers, messageContent, message, targets } = data;
@@ -272,15 +283,7 @@ client.on(Events.InteractionCreate, async interaction => {
             `💬 ${messageContent}`
         });
 
-        // SAVE TEMPLATE
         lastBroadcast.set(interaction.guild.id, { messageContent, targets });
-
-        // 🔥 MOVE PANEL AFTER BROADCAST
-        if (panelMessage) {
-          try { await panelMessage.delete(); } catch {}
-          panelMessage = await createPanel(message.channel);
-        }
-
         session.delete(interaction.user.id);
       }
     }
@@ -288,25 +291,6 @@ client.on(Events.InteractionCreate, async interaction => {
   } catch (err) {
     console.error(err);
   }
-});
-
-// =========================
-// 🔥 PANEL MOVE (USER ONLY)
-// =========================
-client.on(Events.MessageCreate, async msg => {
-
-  if (!panelMessage) return;
-
-  if (msg.author.id === client.user.id) return; // 🔥 prevent loop
-
-  if (msg.channel.id !== panelMessage.channel.id) return;
-  if (msg.id === panelMessage.id) return;
-
-  try {
-    await panelMessage.delete();
-  } catch {}
-
-  panelMessage = await createPanel(msg.channel);
 });
 
 client.login(process.env.TOKEN);
