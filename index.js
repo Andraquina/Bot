@@ -29,6 +29,9 @@ const client = new Client({
 const session = new Map();
 const guildMemberCache = new Map();
 
+// =========================
+// 🚀 READY
+// =========================
 client.once(Events.ClientReady, async () => {
   console.log('BOT IS ONLINE');
 
@@ -100,6 +103,7 @@ function safeCompanyId(str) {
 // 👋 JOIN SYSTEM
 // =========================
 client.on(Events.GuildMemberAdd, async member => {
+
   const channel = member.guild.channels.cache.find(c => c.name === "welcome");
   if (!channel) return;
 
@@ -124,6 +128,7 @@ client.on(Events.InteractionCreate, async interaction => {
     // OPEN FORM
     // =========================
     if (interaction.isButton() && interaction.customId === 'open_form') {
+
       try { await interaction.message.delete(); } catch {}
 
       const modal = new ModalBuilder()
@@ -200,7 +205,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // ✅ APPROVE (FIXED)
+    // ✅ APPROVE (FULL RESTORED)
     // =========================
     if (interaction.isButton() && interaction.customId.startsWith("approve_")) {
 
@@ -219,7 +224,9 @@ client.on(Events.InteractionCreate, async interaction => {
       let company = role ? role.name : formatWords(companyId);
 
       if (!role) {
-        role = await interaction.guild.roles.create({ name: company });
+        role = await interaction.guild.roles.create({
+          name: company
+        });
       }
 
       const pendingRole = interaction.guild.roles.cache.find(r => r.name === "Pending");
@@ -227,8 +234,12 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await member.roles.add(role);
 
+      // announcements + rules
       for (const ch of interaction.guild.channels.cache.values()) {
-        if (ch.name.toLowerCase().includes("announcement") || ch.name.toLowerCase().includes("rule")) {
+        if (
+          ch.name.toLowerCase().includes("announcement") ||
+          ch.name.toLowerCase().includes("rule")
+        ) {
           await ch.permissionOverwrites.edit(role.id, {
             ViewChannel: true,
             ReadMessageHistory: true,
@@ -236,6 +247,62 @@ client.on(Events.InteractionCreate, async interaction => {
           });
         }
       }
+
+      const permissionOverwrites = [
+        {
+          id: interaction.guild.id,
+          deny: [PermissionsBitField.Flags.ViewChannel],
+        },
+        {
+          id: role.id,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages,
+            PermissionsBitField.Flags.ReadMessageHistory,
+            PermissionsBitField.Flags.Connect,
+            PermissionsBitField.Flags.Speak
+          ]
+        }
+      ];
+
+      let category = interaction.guild.channels.cache.find(c =>
+        c.type === ChannelType.GuildCategory &&
+        isSameCompany(c.name, company)
+      );
+
+      if (!category) {
+        category = await interaction.guild.channels.create({
+          name: company,
+          type: ChannelType.GuildCategory,
+          permissionOverwrites
+        });
+
+        await interaction.guild.channels.create({
+          name: 'general',
+          type: ChannelType.GuildText,
+          parent: category.id
+        });
+
+        await interaction.guild.channels.create({
+          name: 'Voice Call',
+          type: ChannelType.GuildVoice,
+          parent: category.id,
+          permissionOverwrites
+        });
+      }
+
+      const welcomeChannel = interaction.guild.channels.cache.find(c => c.name === "welcome");
+      if (welcomeChannel) {
+        await welcomeChannel.permissionOverwrites.edit(role.id, {
+          ViewChannel: false
+        });
+      }
+
+      try {
+        await member.send(
+          `✅ You’ve been approved! Welcome to **Inter Molds, Inc.** 🎉\n\nPlease check the rules and announcements channels.`
+        );
+      } catch {}
 
       await interaction.message.delete().catch(() => {});
 
@@ -245,7 +312,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // 📢 BROADCAST PANEL
+    // 📢 BROADCAST SYSTEM
     // =========================
     if (interaction.isChatInputCommand() && interaction.commandName === "setup-broadcast") {
 
@@ -262,9 +329,6 @@ client.on(Events.InteractionCreate, async interaction => {
       return interaction.reply({ content: "✅ Panel created", ephemeral: true });
     }
 
-    // =========================
-    // 🚀 START BROADCAST
-    // =========================
     if (interaction.isButton() && interaction.customId === "start_broadcast") {
 
       const roles = interaction.guild.roles.cache
@@ -287,9 +351,6 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
-    // =========================
-    // DROPDOWN → MODAL
-    // =========================
     if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
 
       session.set(interaction.user.id, {
@@ -313,9 +374,6 @@ client.on(Events.InteractionCreate, async interaction => {
       return interaction.showModal(modal);
     }
 
-    // =========================
-    // MODAL → PREVIEW
-    // =========================
     if (interaction.isModalSubmit() && interaction.customId === "broadcast_modal") {
 
       await interaction.deferUpdate();
@@ -339,8 +397,7 @@ client.on(Events.InteractionCreate, async interaction => {
       );
 
       await data.message.edit({
-        content:
-          `📢 **Preview**\n\n🎯 ${targets.join(", ")}\n👥 ${targetMembers.size}\n\n💬 ${messageContent}`,
+        content: `📢 Preview\n\nUsers: ${targetMembers.size}\n\n${messageContent}`,
         components: [buttons]
       });
 
@@ -351,9 +408,6 @@ client.on(Events.InteractionCreate, async interaction => {
       });
     }
 
-    // =========================
-    // BROADCAST BUTTONS
-    // =========================
     if (interaction.isButton() && ["confirm","back","cancel"].includes(interaction.customId)) {
 
       const data = session.get(interaction.user.id);
@@ -375,10 +429,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         for (const member of targetMembers.values()) {
           i++;
-          try {
-            await member.send(messageContent);
-          } catch {}
-
+          try { await member.send(messageContent); } catch {}
           await message.edit({ content: `🚀 Sending... ${i}/${targetMembers.size}` });
         }
 
