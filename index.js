@@ -32,7 +32,7 @@ const client = new Client({
 // Global States
 const session = new Map();
 const repliedUsers = new Set();
-const onboardingData = new Map(); // Stores pending approvals
+const onboardingData = new Map();
 
 // =========================
 // 🚀 ON READY & REGISTER
@@ -129,6 +129,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
     // 3. BUTTONS
     if (interaction.isButton()) {
+      
       // --- ONBOARDING: OPEN MODAL ---
       if (interaction.customId === 'open_onboarding_modal') {
         const modal = new ModalBuilder().setCustomId('onboarding_modal').setTitle('Company Registration');
@@ -193,7 +194,7 @@ client.on(Events.InteractionCreate, async interaction => {
       const bData = session.get(interaction.user.id);
       if (interaction.customId === "confirm" && bData) {
         const { targetMembers, messageContent, message, targets } = bData;
-        await interaction.update({ content: `🚀 Sending to ${targetMembers.size} users...`, components: [] });
+        await interaction.update({ content: `🚀 Sending...`, components: [] });
         let success = 0;
         for (const m of targetMembers.values()) {
           try {
@@ -214,8 +215,16 @@ client.on(Events.InteractionCreate, async interaction => {
         const company = interaction.fields.getTextInputValue('company_name');
         onboardingData.set(interaction.user.id, { name, company });
 
-        const adminChan = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("admin"));
-        if (!adminChan) return interaction.reply({ content: "Error: No admin channel.", ephemeral: true });
+        // FIX: Ensure we find a TEXT channel, not a category
+        const adminChan = interaction.guild.channels.cache.find(c => 
+          c.name.toLowerCase().includes("admin") && 
+          c.type === ChannelType.GuildText
+        );
+
+        if (!adminChan) {
+          console.error("❌ Admin text channel not found.");
+          return interaction.reply({ content: "Error: No admin text channel found.", ephemeral: true });
+        }
 
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success),
