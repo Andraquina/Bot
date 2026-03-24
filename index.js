@@ -30,7 +30,7 @@ const lastBroadcast = new Map();
 let panelMessage = null;
 
 // =========================
-// 🚀 REGISTER COMMANDS
+// 🚀 REGISTER COMMAND
 // =========================
 client.once(Events.ClientReady, async () => {
   console.log('🔥 BOT READY');
@@ -87,9 +87,6 @@ async function buildDropdown(guild, selected = []) {
     ]);
 }
 
-// =========================
-// 📌 PANEL
-// =========================
 async function createPanel(channel) {
   const button = new ButtonBuilder()
     .setCustomId("start_broadcast")
@@ -197,7 +194,6 @@ client.on(Events.InteractionCreate, async interaction => {
       const buttons = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId("template").setLabel("Use Last").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("back").setLabel("Back").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
       );
 
@@ -226,19 +222,6 @@ client.on(Events.InteractionCreate, async interaction => {
       if (interaction.customId === "cancel") {
         session.delete(interaction.user.id);
         return interaction.update({ content: "❌ Cancelled.", components: [] });
-      }
-
-      if (interaction.customId === "template") {
-        const template = lastBroadcast.get(interaction.guild.id);
-        if (!template) return interaction.reply({ content: "❌ No template.", ephemeral: true });
-
-        return interaction.update({
-          content:
-            `📄 Loaded Template\n\n` +
-            `🎯 ${template.targets.join(", ")}\n\n` +
-            `💬 ${template.messageContent}`,
-          components: []
-        });
       }
 
       if (interaction.customId === "confirm") {
@@ -286,11 +269,18 @@ client.on(Events.InteractionCreate, async interaction => {
             `🎯 Targets: ${targets.join(", ")}\n` +
             `👥 Sent: ${success}\n` +
             `❌ Failed: ${failed}\n\n` +
-            `💬 ${messageContent}`,
-          components: []
+            `💬 ${messageContent}`
         });
 
+        // SAVE TEMPLATE
         lastBroadcast.set(interaction.guild.id, { messageContent, targets });
+
+        // 🔥 MOVE PANEL AFTER BROADCAST
+        if (panelMessage) {
+          try { await panelMessage.delete(); } catch {}
+          panelMessage = await createPanel(message.channel);
+        }
+
         session.delete(interaction.user.id);
       }
     }
@@ -301,11 +291,14 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 // =========================
-// 🔥 AUTO-STICKY PANEL (WORKING)
+// 🔥 PANEL MOVE (USER ONLY)
 // =========================
 client.on(Events.MessageCreate, async msg => {
 
   if (!panelMessage) return;
+
+  if (msg.author.id === client.user.id) return; // 🔥 prevent loop
+
   if (msg.channel.id !== panelMessage.channel.id) return;
   if (msg.id === panelMessage.id) return;
 
