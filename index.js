@@ -139,7 +139,6 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     if (interaction.isButton()) {
-      // ONBOARDING
       if (interaction.customId === 'open_onboarding_modal') {
         const modal = new ModalBuilder().setCustomId('onboarding_modal').setTitle('Company Registration');
         modal.addComponents(
@@ -149,7 +148,6 @@ client.on(Events.InteractionCreate, async interaction => {
         return await interaction.showModal(modal);
       }
 
-      // APPROVAL / DENIAL
       if (interaction.customId.startsWith('approve_') || interaction.customId.startsWith('deny_')) {
         const [action, userId] = interaction.customId.split('_');
         const data = onboardingData.get(userId);
@@ -164,15 +162,15 @@ client.on(Events.InteractionCreate, async interaction => {
           const cleanCompany = formatTitleCase(data.company);
           const acronym = getAcronym(cleanCompany);
 
-          // Nickname logic
+          // 1. Nickname
           await member.setNickname(`${cleanName} | ${acronym}`).catch(() => null);
 
-          // Role assignment
+          // 2. Role
           let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, cleanCompany));
           if (!role) role = await interaction.guild.roles.create({ name: cleanCompany, color: 0x3498db });
           await member.roles.add(role);
 
-          // Channel creation
+          // 3. Channels
           const category = await interaction.guild.channels.create({
             name: cleanCompany,
             type: ChannelType.GuildCategory,
@@ -202,18 +200,20 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // AUTO-DELETE SETUP MESSAGE & REVOKE WELCOME ACCESS
+          // 4. CLEANUP WELCOME & HIDE CHANNEL
           if (data.welcomeMsgId && data.welcomeChannelId) {
             const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
             if (welcomeChan) {
+              // Delete the "Start Setup" message
               const msg = await welcomeChan.messages.fetch(data.welcomeMsgId).catch(() => null);
               if (msg) await msg.delete().catch(() => null);
-              // Revoke permission for user to see welcome channel
+              
+              // Remove user visibility from welcome channel
               await welcomeChan.permissionOverwrites.create(member.id, { ViewChannel: false }).catch(() => null);
             }
           }
 
-          // SEND RULES (PORTUGAL TIME)
+          // 5. DM RULES (With proper spacing)
           try {
             const now = new Date();
             const rulesEmbed = new EmbedBuilder()
@@ -225,7 +225,11 @@ client.on(Events.InteractionCreate, async interaction => {
                 iconURL: interaction.guild.iconURL() 
               });
             
-            await member.send({ content: `✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉`, embeds: [rulesEmbed] });
+            // Noticeable space between text and embed
+            await member.send({ 
+              content: `✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉\n\u200B`, 
+              embeds: [rulesEmbed] 
+            });
           } catch (e) { console.log("DM failed."); }
 
           await interaction.update({ content: `✅ Approved ${cleanName}`, components: [] });
@@ -236,7 +240,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // --- BROADCAST FLOW RESTORED ---
+      // BROADCAST (Initial Logic)
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         const msg = await interaction.reply({
@@ -250,17 +254,14 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const bData = session.get(interaction.user.id);
       if (!bData) return;
-
       if (interaction.customId === "cancel") {
         session.delete(interaction.user.id);
         return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
-
       if (interaction.customId === "back") {
         const dropdown = await buildDropdown(interaction.guild, bData.targets);
         return interaction.update({ content: "🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)] });
       }
-
       if (interaction.customId === "confirm") {
         const { targetMembers, messageContent, message, targets } = bData;
         await interaction.update({ content: `🚀 Sending... (0/${targetMembers.size})`, components: [] });
@@ -328,7 +329,7 @@ client.on(Events.InteractionCreate, async interaction => {
         session.set(interaction.user.id, { ...data, messageContent: text, targetMembers });
       }
     }
-  } catch (err) { console.error("Interaction Error:", err); }
+  } catch (err) { console.error("Error:", err); }
 });
 
 client.on(Events.MessageCreate, async (message) => {
