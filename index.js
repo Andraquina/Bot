@@ -93,9 +93,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
   try {
 
-    // =========================
     // 🚀 START
-    // =========================
     if (interaction.isChatInputCommand() && interaction.commandName === "broadcast") {
 
       const dropdown = await buildDropdown(interaction.guild);
@@ -112,12 +110,8 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
-    // =========================
     // 📌 DROPDOWN → MODAL
-    // =========================
     if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
-
-      if (interaction.replied || interaction.deferred) return;
 
       const data = session.get(interaction.user.id) || {};
 
@@ -150,15 +144,10 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
-    // =========================
-    // 📝 MODAL → PREVIEW (FINAL FIX)
-    // =========================
+    // 📝 MODAL → PREVIEW
     if (interaction.isModalSubmit() && interaction.customId === "broadcast_modal") {
 
-      if (interaction.replied || interaction.deferred) return;
-
-      // ✅ SILENT ACK (NO ERROR, NO "THINKING")
-      await interaction.deferUpdate();
+      await interaction.deferUpdate(); // silent ack
 
       const data = session.get(interaction.user.id);
       if (!data) return;
@@ -173,9 +162,7 @@ client.on(Events.InteractionCreate, async interaction => {
         else if (timeRaw.includes("h")) delay = num * 3600000;
       }
 
-      // MEMBER CACHE
       let members = guildMemberCache.get(interaction.guild.id);
-
       if (!members) {
         members = await interaction.guild.members.fetch();
         guildMemberCache.set(interaction.guild.id, members);
@@ -200,9 +187,9 @@ client.on(Events.InteractionCreate, async interaction => {
       await data.message.edit({
         content:
           `📢 **Preview**\n\n` +
-          `🎯 ${targets.join(", ")}\n` +
-          `👥 ${targetMembers.size} users\n` +
-          `⏱️ ${timeRaw || "no delay"}\n\n` +
+          `🎯 Targets: ${targets.join(", ")}\n` +
+          `👥 Users: ${targetMembers.size}\n` +
+          `⏱️ Delay: ${timeRaw || "none"}\n\n` +
           `💬 ${messageContent}`,
         components: [buttons]
       });
@@ -217,9 +204,7 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
-    // =========================
     // 🔘 BUTTONS
-    // =========================
     if (interaction.isButton()) {
 
       const data = session.get(interaction.user.id);
@@ -249,13 +234,13 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
-      // ✅ CONFIRM
+      // ✅ CONFIRM (WITH PROGRESS)
       if (interaction.customId === "confirm") {
 
-        const { targetMembers, messageContent, delay, targets } = data;
+        const { targetMembers, messageContent, delay, targets, message } = data;
 
         await interaction.update({
-          content: delay ? "⏳ Scheduled..." : "🚀 Sending...",
+          content: `🚀 Sending... (0/${targetMembers.size})`,
           components: []
         });
 
@@ -263,8 +248,12 @@ client.on(Events.InteractionCreate, async interaction => {
 
           let success = 0;
           let failed = 0;
+          let i = 0;
+          const total = targetMembers.size;
 
           for (const member of targetMembers.values()) {
+            i++;
+
             try {
               await member.send({
                 embeds: [
@@ -280,14 +269,24 @@ client.on(Events.InteractionCreate, async interaction => {
             } catch {
               failed++;
             }
+
+            // update every 2 users for smooth UX
+            if (i % 2 === 0 || i === total) {
+              await message.edit({
+                content: `🚀 Sending... (${i}/${total})`,
+                components: []
+              });
+            }
           }
 
-          await interaction.followUp({
+          await message.edit({
             content:
               `✅ **Broadcast Completed**\n\n` +
+              `🎯 Targets: ${targets.join(", ")}\n` +
               `👥 Sent: ${success}\n` +
               `❌ Failed: ${failed}\n\n` +
-              `💬 ${messageContent}`
+              `💬 ${messageContent}`,
+            components: []
           });
 
         }, delay);
