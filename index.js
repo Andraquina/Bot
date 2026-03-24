@@ -97,15 +97,11 @@ async function buildDropdown(guild, selected = []) {
 // =========================
 client.on(Events.GuildMemberAdd, async member => {
   console.log(`👤 New member detected: ${member.user.tag}`);
-  
-  // Find channel that includes "welcome" in the name
   const channel = member.guild.channels.cache.find(c => 
     c.name.toLowerCase().includes("welcome") && c.type === ChannelType.GuildText
   );
 
-  if (!channel) {
-    return console.error("❌ Could not find a text channel with 'welcome' in the name.");
-  }
+  if (!channel) return console.error("❌ No welcome channel found.");
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('open_onboarding_modal').setLabel('Start Setup').setStyle(ButtonStyle.Primary)
@@ -116,12 +112,8 @@ client.on(Events.GuildMemberAdd, async member => {
       content: `Welcome <@${member.id}>! To access the server, please click the button below to register.`,
       components: [row]
     });
-
     onboardingData.set(member.id, { welcomeMsgId: welcomeMsg.id, welcomeChannelId: channel.id });
-    console.log(`✅ Welcome message sent to ${member.user.tag}`);
-  } catch (err) {
-    console.error(`❌ Failed to send welcome message:`, err);
-  }
+  } catch (err) { console.error(err); }
 });
 
 // =========================
@@ -134,25 +126,14 @@ client.on(Events.InteractionCreate, async interaction => {
       const parts = focused.split(";");
       const current = parts[parts.length - 1].trim().toLowerCase();
       const roles = interaction.guild.roles.cache.filter(r => r.name !== "@everyone").map(r => r.name);
-      const starts = roles.filter(r => r.toLowerCase().startsWith(current));
-      const includes = roles.filter(r => r.toLowerCase().includes(current) && !starts.includes(r));
-      let results = [...starts, ...includes];
-      const selected = parts.slice(0, -1).map(p => p.trim().toLowerCase());
-      results = results.filter(r => !selected.includes(r.toLowerCase()));
-      if (!selected.includes("all")) results.unshift("ALL");
-      results = results.slice(0, 25);
-      const suggestions = results.map(name => {
-        const newParts = [...parts];
-        newParts[newParts.length - 1] = name;
-        return { name: newParts.join("; "), value: newParts.join("; ") };
-      });
-      return await interaction.respond(suggestions);
+      const suggestions = roles.filter(r => r.toLowerCase().includes(current)).slice(0, 25);
+      return await interaction.respond(suggestions.map(s => ({ name: s, value: s })));
     }
 
     if (interaction.isChatInputCommand() && interaction.commandName === "setup-broadcast") {
       const button = new ButtonBuilder().setCustomId("start_broadcast").setLabel("📢 Start Broadcast").setStyle(ButtonStyle.Primary);
       await interaction.channel.send({
-        content: "📢 **Broadcast Panel**\nClick below to start:",
+        content: "📢 **Broadcast Panel**",
         components: [new ActionRowBuilder().addComponents(button)]
       });
       return interaction.reply({ content: "✅ Panel created.", flags: [4096] });
@@ -175,7 +156,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const member = await interaction.guild.members.fetch(userId).catch(() => null);
 
         if (action === 'approve') {
-          if (!member) return interaction.reply({ content: "User left server.", flags: [4096] });
+          if (!member) return interaction.reply({ content: "User left.", flags: [4096] });
           const cleanName = formatTitleCase(data.name);
           const cleanCompany = formatTitleCase(data.company);
           const acronym = getAcronym(cleanCompany);
@@ -195,6 +176,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
+          // Text Channel Permissions
           await interaction.guild.channels.create({
             name: `general`,
             type: ChannelType.GuildText,
@@ -222,6 +204,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
+          // Voice Call Permissions
           await interaction.guild.channels.create({
             name: `Voice Call`,
             type: ChannelType.GuildVoice,
@@ -252,12 +235,13 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
+          // Cleanup Welcome
           if (data.welcomeMsgId && data.welcomeChannelId) {
             const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
             if (welcomeChan) {
               const msg = await welcomeChan.messages.fetch(data.welcomeMsgId).catch(() => null);
               if (msg) await msg.delete().catch(() => null);
-              await welcomeChan.permissionOverwrites.create(member.id, { ViewChannel: false });
+              await welcomeChan.permissionOverwrites.create(member.id, { ViewChannel: false }).catch(() => null);
             }
           }
 
@@ -299,16 +283,16 @@ client.on(Events.InteractionCreate, async interaction => {
       if (interaction.customId === "confirm") {
         const { targetMembers, messageContent, message, targets } = data;
         await interaction.update({ content: `🚀 Sending... (0/${targetMembers.size})`, components: [] });
-        let i = 0; let success = 0; let failed = 0;
+        let i = 0; let success = 0;
         for (const m of targetMembers.values()) {
           i++;
           try {
             await m.send({ embeds: [new EmbedBuilder().setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db).setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update").setDescription(messageContent).setFooter({ text: "Inter Molds, Inc." }).setTimestamp()] });
             success++;
-          } catch { failed++; }
+          } catch (e) {}
           if (i % 2 === 0 || i === targetMembers.size) await message.edit({ content: `🚀 Sending... (${i}/${targetMembers.size})` });
         }
-        await message.edit({ content: `✅ **Broadcast Completed**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Sent: ${success}\n❌ Failed: ${failed}\n\n💬 ${messageContent}` });
+        await message.edit({ content: `✅ **Broadcast Completed**\n👥 Sent: ${success}` });
         session.delete(interaction.user.id);
       }
     }
@@ -317,10 +301,7 @@ client.on(Events.InteractionCreate, async interaction => {
       const data = session.get(interaction.user.id) || {};
       session.set(interaction.user.id, { ...data, targets: interaction.values });
       const modal = new ModalBuilder().setCustomId("broadcast_modal").setTitle("Broadcast Message");
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("message").setLabel("Message").setStyle(TextInputStyle.Paragraph)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("delay").setLabel("Delay (optional)").setStyle(TextInputStyle.Short).setRequired(false))
-      );
+      modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("message").setLabel("Message").setStyle(TextInputStyle.Paragraph)));
       await interaction.showModal(modal);
     }
 
@@ -330,8 +311,10 @@ client.on(Events.InteractionCreate, async interaction => {
         const company = interaction.fields.getTextInputValue('company_name');
         const current = onboardingData.get(interaction.user.id) || {};
         onboardingData.set(interaction.user.id, { ...current, name, company });
+
         const adminChan = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("admin") && c.type === ChannelType.GuildText);
-        if (!adminChan) return interaction.reply({ content: "Error: No admin text channel found.", flags: [4096] });
+        if (!adminChan) return interaction.reply({ content: "Error: No admin channel.", flags: [4096] });
+
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success),
           new ButtonBuilder().setCustomId(`deny_${interaction.user.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger)
@@ -343,18 +326,15 @@ client.on(Events.InteractionCreate, async interaction => {
       if (interaction.customId === "broadcast_modal") {
         await interaction.deferUpdate();
         const data = session.get(interaction.user.id);
-        if (!data) return;
         const text = interaction.fields.getTextInputValue("message");
-        const targets = data.targets;
-        let members = guildMemberCache.get(interaction.guild.id);
-        if (!members) { members = await interaction.guild.members.fetch(); guildMemberCache.set(interaction.guild.id, members); }
-        const targetMembers = members.filter(m => !m.user.bot && (targets.includes("all") || m.roles.cache.some(r => targets.some(t => isSameCompany(r.name, t)))));
+        const members = await interaction.guild.members.fetch();
+        const targetMembers = members.filter(m => !m.user.bot && (data.targets.includes("all") || m.roles.cache.some(r => data.targets.some(t => isSameCompany(r.name, t)))));
         const buttons = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success),
           new ButtonBuilder().setCustomId("back").setLabel("✏️ Edit").setStyle(ButtonStyle.Secondary),
           new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
         );
-        await data.message.edit({ content: `📢 **Preview**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Users: ${targetMembers.size}\n\n💬 ${text}`, components: [buttons] });
+        await data.message.edit({ content: `📢 **Preview**\n\n🎯 Targets: ${data.targets.join(", ")}\n👥 Users: ${targetMembers.size}\n\n💬 ${text}`, components: [buttons] });
         session.set(interaction.user.id, { ...data, messageContent: text, targetMembers });
       }
     }
