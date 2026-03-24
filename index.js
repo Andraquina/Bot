@@ -203,7 +203,6 @@ client.on(Events.InteractionCreate, async interaction => {
         targetMembers
       });
 
-      await interaction.deferUpdate();
       return;
     }
 
@@ -229,7 +228,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         const dropdown = await buildDropdown(interaction.guild, data.targets);
 
-        // 🔥 RESET SESSION PROPERLY
+        // 🔥 RESET SESSION
         session.set(interaction.user.id, {
           message: data.message
         });
