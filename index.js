@@ -30,7 +30,7 @@ const client = new Client({
   partials: [Partials.Channel]
 });
 
-// Broadcast Sessions and Caches
+// Global States
 const session = new Map();
 const guildMemberCache = new Map();
 const repliedUsers = new Set();
@@ -54,7 +54,7 @@ client.once(Events.ClientReady, async () => {
       Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
       { body: commands }
     );
-    console.log("✅ Commands registered");
+    console.log("✅ Slash Commands registered successfully");
   } catch (error) {
     console.error("Error registering commands:", error);
   }
@@ -65,11 +65,6 @@ client.once(Events.ClientReady, async () => {
 // =========================
 function normalize(str) {
   return str.toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-function formatWords(str) {
-  return str.toLowerCase().split(/\s+/).filter(w => w.length > 0)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 }
 
 function getAcronym(company) {
@@ -94,11 +89,11 @@ async function buildDropdown(guild, selected = []) {
   const roles = guild.roles.cache
     .filter(r => r.name !== "@everyone" && !r.managed)
     .map(r => r.name)
-    .slice(0, 24); // Keep room for 'ALL'
+    .slice(0, 24); 
 
   return new StringSelectMenuBuilder()
     .setCustomId("select_companies")
-    .setPlaceholder("Select companies")
+    .setPlaceholder("Select companies for broadcast")
     .setMinValues(1)
     .setMaxValues(Math.min(roles.length + 1, 25))
     .addOptions([
@@ -118,7 +113,7 @@ async function createPanel(channel) {
     .setStyle(ButtonStyle.Primary);
 
   return await channel.send({
-    content: "📢 **Broadcast Panel**\nClick below to start:",
+    content: "📢 **Broadcast Panel**\nClick below to start a message to specific companies:",
     components: [new ActionRowBuilder().addComponents(button)]
   });
 }
@@ -155,17 +150,17 @@ client.on(Events.GuildMemberAdd, async member => {
   const row = new ActionRowBuilder().addComponents(button);
 
   await channel.send({
-    content: `<@${member.id}> Welcome! Click below to get started:`,
+    content: `<@${member.id}> Welcome to the server! Click below to get started:`,
     components: [row]
   });
 });
 
 // =========================
-// 📋 INTERACTIONS (Merged Logic)
+// 📋 INTERACTIONS (Unified Handler)
 // =========================
 client.on(Events.InteractionCreate, async interaction => {
   try {
-    // 1. AUTOCOMPLETE
+    // --- 1. AUTOCOMPLETE ---
     if (interaction.isAutocomplete()) {
       const focused = interaction.options.getFocused() || "";
       const parts = focused.split(";");
@@ -193,21 +188,30 @@ client.on(Events.InteractionCreate, async interaction => {
       return await interaction.respond(suggestions);
     }
 
-    // 2. SLASH COMMANDS
+    // --- 2. SLASH COMMANDS ---
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === "setup-broadcast") {
         await createPanel(interaction.channel);
-        return interaction.reply({ content: "✅ Panel created.", ephemeral: true });
+        return interaction.reply({ content: "✅ Broadcast panel created.", ephemeral: true });
       }
     }
 
-    // 3. BUTTONS
+    // --- 3. BUTTONS ---
     if (interaction.isButton()) {
-      // Broadcast Start
+      
+      // A. Handle the "Start Setup" from Welcome
+      if (interaction.customId === 'open_form') {
+        return await interaction.reply({
+          content: "✅ **Setup Started!** Please wait for further instructions or check your DMs.",
+          ephemeral: true
+        });
+      }
+
+      // B. Handle the "Start Broadcast" panel button
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         const msg = await interaction.reply({
-          content: "🎯 Select companies:",
+          content: "🎯 **Broadcast Setup:** Select the companies you want to message:",
           components: [new ActionRowBuilder().addComponents(dropdown)],
           fetchReply: true
         });
@@ -215,13 +219,13 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // Handle Confirm/Cancel/Back for Broadcast
+      // C. Broadcast Confirmation logic
       const data = session.get(interaction.user.id);
       if (!data) return;
 
       if (interaction.customId === "cancel") {
         session.delete(interaction.user.id);
-        return interaction.update({ content: "❌ Cancelled.", components: [] });
+        return interaction.update({ content: "❌ Broadcast cancelled.", components: [] });
       }
 
       if (interaction.customId === "back") {
@@ -256,26 +260,30 @@ client.on(Events.InteractionCreate, async interaction => {
           }
         }
         await message.edit({
-          content: `✅ **Broadcast Completed**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Sent: ${success}\n❌ Failed: ${failed}\n\n💬 ${messageContent}`
+          content: `✅ **Broadcast Completed**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Sent: ${success}\n❌ Failed: ${failed}\n\n💬 Message: ${messageContent}`
         });
         session.delete(interaction.user.id);
       }
     }
 
-    // 4. SELECT MENU
+    // --- 4. SELECT MENUS ---
     if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
       const data = session.get(interaction.user.id) || {};
       session.set(interaction.user.id, { ...data, targets: interaction.values });
 
-      const modal = new ModalBuilder().setCustomId("broadcast_modal").setTitle("Broadcast Message");
+      const modal = new ModalBuilder().setCustomId("broadcast_modal").setTitle("Compose Broadcast");
       modal.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("message").setLabel("Message").setStyle(TextInputStyle.Paragraph)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("delay").setLabel("Delay (optional)").setStyle(TextInputStyle.Short).setRequired(false))
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId("message").setLabel("Message Content").setStyle(TextInputStyle.Paragraph).setRequired(true)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId("delay").setLabel("Optional Note").setStyle(TextInputStyle.Short).setRequired(false)
+        )
       );
       return await interaction.showModal(modal);
     }
 
-    // 5. MODAL SUBMIT
+    // --- 5. MODAL SUBMISSIONS ---
     if (interaction.isModalSubmit() && interaction.customId === "broadcast_modal") {
       await interaction.deferUpdate();
       const data = session.get(interaction.user.id);
@@ -284,17 +292,18 @@ client.on(Events.InteractionCreate, async interaction => {
       const messageContent = interaction.fields.getTextInputValue("message");
       const targets = data.targets;
 
+      // Fetch fresh members to ensure role accuracy
       let members = await interaction.guild.members.fetch();
       const targetMembers = members.filter(m => !m.user.bot && (targets.includes("all") || m.roles.cache.some(r => targets.some(t => isSameCompany(r.name, t)))));
 
       const buttons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("back").setLabel("✏️ Edit").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("confirm").setLabel("Confirm & Send").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("back").setLabel("✏️ Edit Selection").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
       );
 
       await data.message.edit({
-        content: `📢 **Preview**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Users: ${targetMembers.size}\n\n💬 ${messageContent}`,
+        content: `📢 **Preview Broadcast**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Estimated Reach: ${targetMembers.size} users\n\n💬 **Content:**\n${messageContent}`,
         components: [buttons]
       });
 
@@ -302,7 +311,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
   } catch (err) {
-    console.error("Interaction Error:", err);
+    console.error("Interaction Handling Error:", err);
   }
 });
 
