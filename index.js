@@ -151,14 +151,11 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // 📝 MODAL → PREVIEW (FINAL FIX)
+    // 📝 MODAL → PREVIEW (NO DEFER = NO "THINKING")
     // =========================
     if (interaction.isModalSubmit() && interaction.customId === "broadcast_modal") {
 
       if (interaction.replied || interaction.deferred) return;
-
-      // 🔥 CRITICAL FIX: ACKNOWLEDGE MODAL
-      await interaction.deferReply({ ephemeral: true });
 
       const data = session.get(interaction.user.id);
       if (!data) return;
@@ -173,7 +170,7 @@ client.on(Events.InteractionCreate, async interaction => {
         else if (timeRaw.includes("h")) delay = num * 3600000;
       }
 
-      // 🔥 MEMBER CACHE
+      // MEMBER CACHE (NO RATE LIMIT)
       let members = guildMemberCache.get(interaction.guild.id);
 
       if (!members) {
@@ -284,7 +281,10 @@ client.on(Events.InteractionCreate, async interaction => {
 
           await interaction.followUp({
             content:
-              `✅ Completed\nSent: ${success}\nFailed: ${failed}`
+              `✅ **Broadcast Completed**\n\n` +
+              `👥 Sent: ${success}\n` +
+              `❌ Failed: ${failed}\n\n` +
+              `💬 ${messageContent}`
           });
 
         }, delay);
