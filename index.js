@@ -170,7 +170,7 @@ client.on(Events.InteractionCreate, async interaction => {
           if (!role) role = await interaction.guild.roles.create({ name: cleanCompany, color: 0x3498db });
           await member.roles.add(role);
 
-          // 3. Channels
+          // 3. Category & Company Channels
           const category = await interaction.guild.channels.create({
             name: cleanCompany,
             type: ChannelType.GuildCategory,
@@ -200,20 +200,24 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // 4. CLEANUP WELCOME & HIDE CHANNEL
+          // 4. CLEANUP WELCOME (FORCE DELETE AND HIDE)
           if (data.welcomeMsgId && data.welcomeChannelId) {
             const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
             if (welcomeChan) {
-              // Delete the "Start Setup" message
-              const msg = await welcomeChan.messages.fetch(data.welcomeMsgId).catch(() => null);
-              if (msg) await msg.delete().catch(() => null);
+              // Delete message
+              try {
+                const msg = await welcomeChan.messages.fetch(data.welcomeMsgId);
+                if (msg) await msg.delete();
+              } catch (e) { console.error("Could not delete welcome message."); }
               
-              // Remove user visibility from welcome channel
-              await welcomeChan.permissionOverwrites.create(member.id, { ViewChannel: false }).catch(() => null);
+              // Hide from Role (The Role Lock)
+              await welcomeChan.permissionOverwrites.create(role.id, { ViewChannel: false });
+              // Hide from Member (The Member Lock)
+              await welcomeChan.permissionOverwrites.create(member.id, { ViewChannel: false });
             }
           }
 
-          // 5. DM RULES (With proper spacing)
+          // 5. DM RULES (Formatted with spacing)
           try {
             const now = new Date();
             const rulesEmbed = new EmbedBuilder()
@@ -225,7 +229,6 @@ client.on(Events.InteractionCreate, async interaction => {
                 iconURL: interaction.guild.iconURL() 
               });
             
-            // Noticeable space between text and embed
             await member.send({ 
               content: `✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉\n\u200B`, 
               embeds: [rulesEmbed] 
@@ -240,14 +243,15 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // BROADCAST (Initial Logic)
+      // BROADCAST START
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
-        const msg = await interaction.reply({
+        const response = await interaction.reply({
           content: "🎯 Select companies:",
           components: [new ActionRowBuilder().addComponents(dropdown)],
-          fetchReply: true
+          withResponse: true
         });
+        const msg = await interaction.fetchReply();
         session.set(interaction.user.id, { message: msg });
         return;
       }
