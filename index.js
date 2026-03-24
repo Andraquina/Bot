@@ -24,9 +24,6 @@ const client = new Client({
 
 const session = new Map();
 const guildMemberCache = new Map();
-const lastBroadcast = new Map();
-
-let panelMessage = null;
 
 // =========================
 // 🚀 REGISTER COMMAND
@@ -108,10 +105,10 @@ client.on(Events.InteractionCreate, async interaction => {
     // SETUP PANEL
     if (interaction.isChatInputCommand() && interaction.commandName === "setup-broadcast") {
 
-      panelMessage = await createPanel(interaction.channel);
+      await createPanel(interaction.channel);
 
       return interaction.reply({
-        content: "✅ Panel created. (Tip: pin it for easy access)",
+        content: "✅ Panel created. (Tip: pin it)",
         ephemeral: true
       });
     }
@@ -191,7 +188,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const buttons = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("template").setLabel("Use Last").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("back").setLabel("⬅ Back").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
       );
 
@@ -217,24 +214,28 @@ client.on(Events.InteractionCreate, async interaction => {
       const data = session.get(interaction.user.id);
       if (!data) return;
 
+      // CANCEL
       if (interaction.customId === "cancel") {
         session.delete(interaction.user.id);
         return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
 
-      if (interaction.customId === "template") {
-        const template = lastBroadcast.get(interaction.guild.id);
-        if (!template) return interaction.reply({ content: "❌ No template.", ephemeral: true });
+      // BACK
+      if (interaction.customId === "back") {
+
+        const dropdown = await buildDropdown(interaction.guild, data.targets);
+
+        session.set(interaction.user.id, {
+          message: data.message
+        });
 
         return interaction.update({
-          content:
-            `📄 Loaded Template\n\n` +
-            `🎯 ${template.targets.join(", ")}\n\n` +
-            `💬 ${template.messageContent}`,
-          components: []
+          content: "🎯 Select companies:",
+          components: [new ActionRowBuilder().addComponents(dropdown)]
         });
       }
 
+      // CONFIRM
       if (interaction.customId === "confirm") {
 
         const { targetMembers, messageContent, message, targets } = data;
@@ -283,7 +284,6 @@ client.on(Events.InteractionCreate, async interaction => {
             `💬 ${messageContent}`
         });
 
-        lastBroadcast.set(interaction.guild.id, { messageContent, targets });
         session.delete(interaction.user.id);
       }
     }
