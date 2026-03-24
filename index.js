@@ -150,6 +150,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     if (interaction.isButton()) {
+      // ONBOARDING OPEN MODAL
       if (interaction.customId === 'open_onboarding_modal') {
         const modal = new ModalBuilder().setCustomId('onboarding_modal').setTitle('Company Registration');
         modal.addComponents(
@@ -159,6 +160,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return await interaction.showModal(modal);
       }
 
+      // ONBOARDING APPROVE/DENY
       if (interaction.customId.startsWith('approve_') || interaction.customId.startsWith('deny_')) {
         const [action, userId] = interaction.customId.split('_');
         const data = onboardingData.get(userId);
@@ -187,7 +189,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Text Channel Permissions
+          // Text Channel (general) Permissions
           await interaction.guild.channels.create({
             name: `general`,
             type: ChannelType.GuildText,
@@ -225,7 +227,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Voice Channel Permissions
+          // Voice Call Permissions
           await interaction.guild.channels.create({
             name: `Voice Call`,
             type: ChannelType.GuildVoice,
@@ -286,6 +288,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
+      // Start Broadcast (Original logic)
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         const msg = await interaction.reply({
@@ -297,6 +300,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
+      // Broadcast Confirmation Logic (Reverted to Original)
       const data = session.get(interaction.user.id);
       if (!data) return;
 
@@ -356,7 +360,7 @@ client.on(Events.InteractionCreate, async interaction => {
         onboardingData.set(interaction.user.id, { ...current, name, company });
 
         const adminChan = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("admin") && c.type === ChannelType.GuildText);
-        if (!adminChan) return interaction.reply({ content: "Error: No admin channel.", ephemeral: true });
+        if (!adminChan) return interaction.reply({ content: "Error: No admin text channel found.", ephemeral: true });
 
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success),
