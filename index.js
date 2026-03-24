@@ -146,11 +146,10 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (interaction.isChatInputCommand() && interaction.commandName === "setup-broadcast") {
       await createPanel(interaction.channel);
-      return interaction.reply({ content: "✅ Panel created.", ephemeral: true });
+      return interaction.reply({ content: "✅ Panel created.", flags: [4096] });
     }
 
     if (interaction.isButton()) {
-      // ONBOARDING OPEN MODAL
       if (interaction.customId === 'open_onboarding_modal') {
         const modal = new ModalBuilder().setCustomId('onboarding_modal').setTitle('Company Registration');
         modal.addComponents(
@@ -160,15 +159,14 @@ client.on(Events.InteractionCreate, async interaction => {
         return await interaction.showModal(modal);
       }
 
-      // ONBOARDING APPROVE/DENY
       if (interaction.customId.startsWith('approve_') || interaction.customId.startsWith('deny_')) {
         const [action, userId] = interaction.customId.split('_');
         const data = onboardingData.get(userId);
-        if (!data) return interaction.reply({ content: "Session expired.", ephemeral: true });
+        if (!data) return interaction.reply({ content: "Session expired.", flags: [4096] });
         const member = await interaction.guild.members.fetch(userId).catch(() => null);
 
         if (action === 'approve') {
-          if (!member) return interaction.reply({ content: "User left.", ephemeral: true });
+          if (!member) return interaction.reply({ content: "User left.", flags: [4096] });
           
           const cleanName = formatTitleCase(data.name);
           const cleanCompany = formatTitleCase(data.company);
@@ -177,7 +175,7 @@ client.on(Events.InteractionCreate, async interaction => {
           try { await member.setNickname(`${cleanName} | ${acronym}`); } catch (e) {}
 
           let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, cleanCompany));
-          if (!role) role = await interaction.guild.roles.create({ name: cleanCompany, color: 'Blue' });
+          if (!role) role = await interaction.guild.roles.create({ name: cleanCompany, color: 0x3498db });
           await member.roles.add(role);
 
           const category = await interaction.guild.channels.create({
@@ -189,7 +187,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // Text Channel (general) Permissions
+          // Text Channel Permissions
           await interaction.guild.channels.create({
             name: `general`,
             type: ChannelType.GuildText,
@@ -208,20 +206,10 @@ client.on(Events.InteractionCreate, async interaction => {
                   PermissionsBitField.Flags.AddReactions,
                   PermissionsBitField.Flags.UseExternalStickers,
                   PermissionsBitField.Flags.PinMessages,
-                  PermissionsBitField.Flags.BypassSlowmode,
                   PermissionsBitField.Flags.ReadMessageHistory,
                   PermissionsBitField.Flags.SendTTSMessages,
                   PermissionsBitField.Flags.SendVoiceMessages,
                   PermissionsBitField.Flags.CreatePolls
-                ],
-                deny: [
-                  PermissionsBitField.Flags.ManageChannels,
-                  PermissionsBitField.Flags.ManageRoles,
-                  PermissionsBitField.Flags.ManageWebhooks,
-                  PermissionsBitField.Flags.CreatePrivateThreads,
-                  PermissionsBitField.Flags.ManageMessages,
-                  PermissionsBitField.Flags.ManageThreads,
-                  PermissionsBitField.Flags.MentionEveryone
                 ]
               }
             ]
@@ -253,13 +241,6 @@ client.on(Events.InteractionCreate, async interaction => {
                   PermissionsBitField.Flags.SendTTSMessages,
                   PermissionsBitField.Flags.SendVoiceMessages,
                   PermissionsBitField.Flags.CreatePolls
-                ],
-                deny: [
-                  PermissionsBitField.Flags.MuteMembers,
-                  PermissionsBitField.Flags.DeafenMembers,
-                  PermissionsBitField.Flags.MoveMembers,
-                  PermissionsBitField.Flags.ManageChannels,
-                  PermissionsBitField.Flags.ManageRoles
                 ]
               }
             ]
@@ -288,7 +269,6 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // Start Broadcast (Original logic)
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         const msg = await interaction.reply({
@@ -300,7 +280,6 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // Broadcast Confirmation Logic (Reverted to Original)
       const data = session.get(interaction.user.id);
       if (!data) return;
 
@@ -360,14 +339,14 @@ client.on(Events.InteractionCreate, async interaction => {
         onboardingData.set(interaction.user.id, { ...current, name, company });
 
         const adminChan = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("admin") && c.type === ChannelType.GuildText);
-        if (!adminChan) return interaction.reply({ content: "Error: No admin text channel found.", ephemeral: true });
+        if (!adminChan) return interaction.reply({ content: "Error: No admin channel.", flags: [4096] });
 
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success),
           new ButtonBuilder().setCustomId(`deny_${interaction.user.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger)
         );
         await adminChan.send({ content: `🔔 **New Request**\n**User:** <@${interaction.user.id}>\n**Name:** ${name}\n**Company:** ${company}`, components: [row] });
-        return interaction.reply({ content: "✅ Submitted. Wait for approval.", ephemeral: true });
+        return interaction.reply({ content: "✅ Submitted. Wait for approval.", flags: [4096] });
       }
 
       if (interaction.customId === "broadcast_modal") {
