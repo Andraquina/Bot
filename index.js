@@ -243,7 +243,7 @@ client.on(Events.InteractionCreate, async interaction => {
         );
         
         await data.message.edit({
-          content: `📢 **Preview**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Users: ${targetMembers.size}\n\n💬 ${messageContent}`,
+          content: `📢 **Preview**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Users: ${targetMembers.size}\n\nMessage: ${messageContent}`,
           components: [buttons]
         });
         
@@ -270,7 +270,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
         await adminChannel.send({ content: `🚨 New request\n\nUser: <@${interaction.user.id}>\nName: ${name}\nCompany: ${company}`, components: [row] });
         
-        // Auto-delete welcome message
         const entry = onboardingData.get(interaction.user.id);
         if (entry?.welcomeMsgId) {
           const welcomeChannel = interaction.guild.channels.cache.get(entry.welcomeChannelId);
@@ -281,17 +280,15 @@ client.on(Events.InteractionCreate, async interaction => {
       }
     }
 
-    // BUTTONS (CONFIRM / BACK / CANCEL / APPROVE)
+    // BUTTONS
     if (interaction.isButton()) {
       const data = session.get(interaction.user.id);
 
-      // BROADCAST CANCEL
       if (interaction.customId === "cancel" && data) {
         session.delete(interaction.user.id);
         return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
 
-      // BROADCAST BACK/EDIT
       if (interaction.customId === "back" && data) {
         const dropdown = await buildDropdown(interaction.guild, data.targets);
         session.set(interaction.user.id, { message: data.message });
@@ -301,7 +298,6 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
-      // BROADCAST CONFIRM
       if (interaction.customId === "confirm" && data) {
         const { targetMembers, messageContent, message, targets } = data;
         await interaction.update({
@@ -322,12 +318,12 @@ client.on(Events.InteractionCreate, async interaction => {
           }
         }
         await message.edit({
-          content: `✅ **Broadcast Completed**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Sent: ${success}\n❌ Failed: ${failed}\n\n💬 ${messageContent}`
+          content: null,
+          embeds: [new EmbedBuilder().setTitle("✅ **Broadcast Completed**").setDescription(`🎯 Targets: ${targets.join(", ")}\n👤 Sent: ${success}\n❌ Failed: ${failed}\n\nMessage: ${messageContent}`).setColor(0x2ecc71)]
         });
         session.delete(interaction.user.id);
       }
 
-      // APPROVE ACTION
       if (interaction.customId.startsWith("approve_")) {
         const userId = interaction.customId.split("_")[1];
         const data = onboardingData.get(userId);
@@ -344,7 +340,7 @@ client.on(Events.InteractionCreate, async interaction => {
         await member.roles.add(role);
         await member.setNickname(`${name} | ${getAcronym(company)}`);
 
-        // Create Channels with Restricted Perms
+        // CATEGORY
         const category = await interaction.guild.channels.create({
           name: company,
           type: ChannelType.GuildCategory,
@@ -357,10 +353,28 @@ client.on(Events.InteractionCreate, async interaction => {
         const basicPerms = [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.AddReactions, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.Speak];
         const restrictPerms = [PermissionsBitField.Flags.MentionEveryone, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.ManageChannels];
 
-        await interaction.guild.channels.create({ name: 'general', type: ChannelType.GuildText, parent: category.id, permissionOverwrites: [{ id: role.id, allow: basicPerms, deny: restrictPerms }] });
-        await interaction.guild.channels.create({ name: 'Voice Call', type: ChannelType.GuildVoice, parent: category.id, permissionOverwrites: [{ id: role.id, allow: basicPerms }] });
+        // 🔥 SECURE CHANNEL CREATION (Locked to @everyone explicitly)
+        await interaction.guild.channels.create({ 
+          name: 'general', 
+          type: ChannelType.GuildText, 
+          parent: category.id, 
+          permissionOverwrites: [
+            { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }, // LOCKED
+            { id: role.id, allow: basicPerms, deny: restrictPerms } 
+          ] 
+        });
 
-        // Clone and wipe welcome
+        await interaction.guild.channels.create({ 
+          name: 'Voice Call', 
+          type: ChannelType.GuildVoice, 
+          parent: category.id, 
+          permissionOverwrites: [
+            { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }, // LOCKED
+            { id: role.id, allow: basicPerms } 
+          ] 
+        });
+
+        // CLONE & WIPE WELCOME
         const welcomeChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("welcome"));
         if (welcomeChannel) {
           const newChannel = await welcomeChannel.clone();
@@ -376,7 +390,6 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.message.delete().catch(() => {});
       }
 
-      // DENY ACTION
       if (interaction.customId.startsWith("deny_")) {
         const userId = interaction.customId.split("_")[1];
         await interaction.message.delete().catch(() => {});
