@@ -122,7 +122,7 @@ client.on(Events.InteractionCreate, async interaction => {
         if (!data) return interaction.reply({ content: "Session expired.", flags: [4096] });
 
         if (action === 'approve') {
-          // STEP 1: DEFER (Stops the 3-second timeout crash)
+          // 1. DEFER & LOCK
           await interaction.deferUpdate();
           processingUsers.add(userId);
 
@@ -133,26 +133,29 @@ client.on(Events.InteractionCreate, async interaction => {
           const cleanCompany = formatTitleCase(data.company);
           const acronym = getAcronym(cleanCompany);
 
-          // STEP 2: NICKNAME & ROLE (Assignment)
+          // 2. IMMEDIATE WELCOME MESSAGE DELETE
+          const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
+          if (welcomeChan) {
+            await welcomeChan.messages.fetch(data.welcomeMsgId).then(m => m.delete()).catch(() => null);
+          }
+
+          // 3. ROLE & NICKNAME
           await member.setNickname(`${cleanName} | ${acronym}`).catch(() => null);
           let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, cleanCompany));
           if (!role) role = await interaction.guild.roles.create({ name: cleanCompany, color: 0x3498db });
           await member.roles.add(role);
 
-          // STEP 3: NUCLEAR CLEANUP & HIDE (Welcome Channel)
-          if (data.welcomeMsgId && data.welcomeChannelId) {
-            const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
-            if (welcomeChan) {
-              // Delete message
-              await welcomeChan.messages.fetch(data.welcomeMsgId).then(m => m.delete()).catch(() => null);
-              
-              // FORCE HIDE for Member ID and Role ID
-              await welcomeChan.permissionOverwrites.create(member.id, { ViewChannel: false }).catch(() => null);
-              await welcomeChan.permissionOverwrites.create(role.id, { ViewChannel: false }).catch(() => null);
-            }
+          // 4. TRIPLE-LOCK WELCOME CHANNEL VISIBILITY
+          if (welcomeChan) {
+            // Lock 1: Deny User ID
+            await welcomeChan.permissionOverwrites.create(member.id, { ViewChannel: false }).catch(() => null);
+            // Lock 2: Deny the new Company Role
+            await welcomeChan.permissionOverwrites.create(role.id, { ViewChannel: false }).catch(() => null);
+            // Lock 3: Deny @everyone (if not already set)
+            await welcomeChan.permissionOverwrites.create(interaction.guild.id, { ViewChannel: false }).catch(() => null);
           }
 
-          // STEP 4: CREATE COMPANY AREA
+          // 5. CREATE COMPANY AREA
           try {
             const category = await interaction.guild.channels.create({
               name: cleanCompany,
@@ -174,7 +177,10 @@ client.on(Events.InteractionCreate, async interaction => {
                   id: role.id, 
                   allow: [
                     PermissionsBitField.Flags.ViewChannel,
-                    8192n, 2048n, 32768n, 16384n, 131072n, 65536n, 524288n, 1048576n, 34359738368n
+                    PermissionsBitField.Flags.SendMessages,
+                    PermissionsBitField.Flags.ReadMessageHistory,
+                    PermissionsBitField.Flags.AttachFiles,
+                    PermissionsBitField.Flags.EmbedLinks
                   ] 
                 }
               ]
@@ -191,17 +197,23 @@ client.on(Events.InteractionCreate, async interaction => {
                   id: role.id, 
                   allow: [
                     PermissionsBitField.Flags.ViewChannel,
-                    1048576n, 2097152n, 4194304n, 512n, 256n, 16777216n
+                    PermissionsBitField.Flags.Connect,
+                    PermissionsBitField.Flags.Speak,
+                    PermissionsBitField.Flags.Stream
                   ] 
                 }
               ]
             });
           } catch (e) { console.error("Channel Error:", e); }
 
-          // STEP 5: DM RULES
+          // 6. DM RULES
           try {
             const now = new Date();
-            const rulesEmbed = new EmbedBuilder().setColor(0xF1C40F).setTitle('📜 Company Rules').setDescription('──────────────\n\n**1. Be respectful**\n**2. No spam**\n**3. Follow all guidelines**\n**4. Keep discussions professional**\n**5. Respect privacy**\n\n──────────────').setFooter({ text: `Inter Molds, Inc. • ${now.toLocaleDateString('pt-PT')} ${now.toLocaleTimeString('pt-PT', {hour: '2-digit', minute:'2-digit'})}`, iconURL: interaction.guild.iconURL() });
+            const rulesEmbed = new EmbedBuilder()
+              .setColor(0xF1C40F)
+              .setTitle('📜 Company Rules')
+              .setDescription('──────────────\n\n**1. Be respectful**\n**2. No spam**\n**3. Follow all guidelines**\n**4. Keep discussions professional**\n**5. Respect privacy**\n\n──────────────')
+              .setFooter({ text: `Inter Molds, Inc. • ${now.toLocaleDateString('pt-PT')} ${now.toLocaleTimeString('pt-PT', {hour: '2-digit', minute:'2-digit'})}`, iconURL: interaction.guild.iconURL() });
             
             await member.send(`✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉\n\u200B`);
             await member.send({ embeds: [rulesEmbed] });
@@ -217,7 +229,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // BROADCAST
+      // BROADCAST (Full Restore)
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         await interaction.reply({ content: "🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)], withResponse: true });
