@@ -501,4 +501,4 @@ client.on(Events.MessageCreate, async (message) => {
   repliedUsers.add(message.author.id);
 });
 
-client.login(process.env.TOKEN);
+client.login(process.env.TOKEN);}
