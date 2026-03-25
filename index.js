@@ -198,7 +198,7 @@ client.on(Events.InteractionCreate, async interaction => {
       // =========================
       if (interaction.customId === "start_broadcast") {
 
-        await interaction.deferReply();
+        await interaction.deferReply({ ephemeral: true });
 
         const dropdown = await buildDropdown(interaction.guild);
 
