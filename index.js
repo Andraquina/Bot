@@ -80,8 +80,10 @@ async function buildDropdown(guild, selected = []) {
 client.on(Events.GuildMemberAdd, async member => {
   const channel = member.guild.channels.cache.find(c => c.name.toLowerCase().includes("welcome") && c.type === ChannelType.GuildText);
   if (!channel) return;
+
   const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('open_onboarding_modal').setLabel('Start Setup').setStyle(ButtonStyle.Primary));
   const welcomeMsg = await channel.send({ content: `Welcome <@${member.id}>! To access the server, please click the button below to register.`, components: [row] });
+  
   onboardingData.set(member.id, { welcomeMsgId: welcomeMsg.id, welcomeChannelId: channel.id });
 });
 
@@ -120,6 +122,7 @@ client.on(Events.InteractionCreate, async interaction => {
         if (!data) return interaction.reply({ content: "Session expired.", flags: [4096] });
 
         if (action === 'approve') {
+          // STEP 1: DEFER (Stops the 3-second timeout crash)
           await interaction.deferUpdate();
           processingUsers.add(userId);
 
@@ -130,23 +133,26 @@ client.on(Events.InteractionCreate, async interaction => {
           const cleanCompany = formatTitleCase(data.company);
           const acronym = getAcronym(cleanCompany);
 
-          // 1. ROLE & NICKNAME
+          // STEP 2: NICKNAME & ROLE (Assignment)
           await member.setNickname(`${cleanName} | ${acronym}`).catch(() => null);
           let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, cleanCompany));
           if (!role) role = await interaction.guild.roles.create({ name: cleanCompany, color: 0x3498db });
           await member.roles.add(role);
 
-          // 2. CLEANUP WELCOME
+          // STEP 3: NUCLEAR CLEANUP & HIDE (Welcome Channel)
           if (data.welcomeMsgId && data.welcomeChannelId) {
             const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
             if (welcomeChan) {
+              // Delete message
               await welcomeChan.messages.fetch(data.welcomeMsgId).then(m => m.delete()).catch(() => null);
+              
+              // FORCE HIDE for Member ID and Role ID
               await welcomeChan.permissionOverwrites.create(member.id, { ViewChannel: false }).catch(() => null);
               await welcomeChan.permissionOverwrites.create(role.id, { ViewChannel: false }).catch(() => null);
             }
           }
 
-          // 3. CREATE CHANNELS (With explicit ViewChannel allow for the role)
+          // STEP 4: CREATE COMPANY AREA
           try {
             const category = await interaction.guild.channels.create({
               name: cleanCompany,
@@ -167,7 +173,7 @@ client.on(Events.InteractionCreate, async interaction => {
                 { 
                   id: role.id, 
                   allow: [
-                    PermissionsBitField.Flags.ViewChannel, // 🔥 The Key
+                    PermissionsBitField.Flags.ViewChannel,
                     8192n, 2048n, 32768n, 16384n, 131072n, 65536n, 524288n, 1048576n, 34359738368n
                   ] 
                 }
@@ -184,7 +190,7 @@ client.on(Events.InteractionCreate, async interaction => {
                 { 
                   id: role.id, 
                   allow: [
-                    PermissionsBitField.Flags.ViewChannel, // 🔥 The Key
+                    PermissionsBitField.Flags.ViewChannel,
                     1048576n, 2097152n, 4194304n, 512n, 256n, 16777216n
                   ] 
                 }
@@ -192,10 +198,11 @@ client.on(Events.InteractionCreate, async interaction => {
             });
           } catch (e) { console.error("Channel Error:", e); }
 
-          // 4. DM RULES
+          // STEP 5: DM RULES
           try {
             const now = new Date();
             const rulesEmbed = new EmbedBuilder().setColor(0xF1C40F).setTitle('📜 Company Rules').setDescription('──────────────\n\n**1. Be respectful**\n**2. No spam**\n**3. Follow all guidelines**\n**4. Keep discussions professional**\n**5. Respect privacy**\n\n──────────────').setFooter({ text: `Inter Molds, Inc. • ${now.toLocaleDateString('pt-PT')} ${now.toLocaleTimeString('pt-PT', {hour: '2-digit', minute:'2-digit'})}`, iconURL: interaction.guild.iconURL() });
+            
             await member.send(`✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉\n\u200B`);
             await member.send({ embeds: [rulesEmbed] });
           } catch (e) {}
@@ -210,7 +217,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // --- BROADCAST LOGIC ---
+      // BROADCAST
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         await interaction.reply({ content: "🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)], withResponse: true });
