@@ -179,7 +179,8 @@ client.on(Events.InteractionCreate, async interaction => {
         });
 
         const adminChannel = interaction.guild.channels.cache.find(c =>
-          c.name.toLowerCase().includes("admin")
+          c.name.toLowerCase().includes("admin") &&
+          c.type === ChannelType.GuildText
         );
 
         if (!adminChannel) {
