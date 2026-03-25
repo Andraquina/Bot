@@ -392,6 +392,7 @@ client.on(Events.InteractionCreate, async interaction => {
         
         await interaction.channel.send({ content: `✅ Approved **${name}** from **${company}**` });
         await interaction.message.delete().catch(() => {});
+        await interaction.message.delete().catch(() => {});
 
       if (interaction.customId.startsWith("deny_")) {
         const userId = interaction.customId.split("_")[1];
