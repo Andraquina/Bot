@@ -267,69 +267,227 @@ client.on(Events.InteractionCreate, async interaction => {
         }
       }
 
-      // Broadcast untouched
-      if (interaction.customId === "start_broadcast") {
-        const dropdown = await buildDropdown(interaction.guild);
-        const msg = await interaction.reply({
-          content: "🎯 Select companies:",
-          components: [new ActionRowBuilder().addComponents(dropdown)],
-          withResponse: true
-        });
-        const reply = await interaction.fetchReply();
-        session.set(interaction.user.id, { message: reply });
-      }
-    }
-
-    if (interaction.isModalSubmit()) {
-
-      if (interaction.customId === 'onboarding_modal') {
-
-        const name = interaction.fields.getTextInputValue('user_name');
-        const company = interaction.fields.getTextInputValue('company_name');
-
-        onboardingData.set(interaction.user.id, {
-          ...onboardingData.get(interaction.user.id),
-          name,
-          company
-        });
-
-        const adminChan = interaction.guild.channels.cache.find(c =>
-          c.name.toLowerCase().includes("admin") &&
-          c.type === ChannelType.GuildText
-        );
-
-        if (!adminChan) {
-          return interaction.reply({
-            content: "❌ Admin channel not found.",
-            ephemeral: true
-          });
-        }
-
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId(`deny_${interaction.user.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger)
-        );
-
-        await adminChan.send({
-          content:
-            `🚨 New company request\n\n` +
-            `User: <@${interaction.user.id}>\n` +
-            `Name: ${name}\n` +
-            `Company: ${company}`,
-          components: [row]
-        });
-
-        return interaction.reply({
-          content: "✅ Request sent to admins.",
-          ephemeral: true
-        });
-      }
-    }
-
-  } catch (err) {
-    console.error(err);
+     // =========================
+// 📢 BROADCAST HELPERS
+// =========================
+async function buildDropdown(guild, selected = []) {
+  try {
+    await guild.roles.fetch();
+  } catch (e) {
+    console.error("Role fetch failed:", e);
   }
-});
+
+  const roles = guild.roles.cache
+    .filter(r => r.name !== "@everyone" && !r.managed)
+    .map(r => r.name)
+    .slice(0, 25);
+
+  return new StringSelectMenuBuilder()
+    .setCustomId("select_companies")
+    .setPlaceholder("Select companies")
+    .setMinValues(1)
+    .setMaxValues(Math.min(roles.length + 1, 25))
+    .addOptions([
+      { label: "ALL", value: "all", default: selected.includes("all") },
+      ...roles.map(r => ({
+        label: r,
+        value: r,
+        default: selected.includes(r)
+      }))
+    ]);
+}
+
+
+// =========================
+// 📢 BROADCAST INTERACTIONS
+// =========================
+
+// START BROADCAST
+if (interaction.isButton() && interaction.customId === "start_broadcast") {
+
+  await interaction.deferReply();
+
+  const dropdown = await buildDropdown(interaction.guild);
+
+  const reply = await interaction.editReply({
+    content: "🎯 Select companies:",
+    components: [new ActionRowBuilder().addComponents(dropdown)]
+  });
+
+  session.set(interaction.user.id, {
+    message: reply
+  });
+
+  return;
+}
+
+
+// SELECT COMPANIES
+if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
+
+  const data = session.get(interaction.user.id) || {};
+
+  session.set(interaction.user.id, {
+    ...data,
+    targets: interaction.values
+  });
+
+  const modal = new ModalBuilder()
+    .setCustomId("broadcast_modal")
+    .setTitle("Broadcast Message");
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId("message")
+        .setLabel("Message")
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+    )
+  );
+
+  return interaction.showModal(modal);
+}
+
+
+// MODAL → PREVIEW
+if (interaction.isModalSubmit() && interaction.customId === "broadcast_modal") {
+
+  await interaction.deferUpdate();
+
+  const data = session.get(interaction.user.id);
+  if (!data) return;
+
+  const text = interaction.fields.getTextInputValue("message");
+
+  const members = await interaction.guild.members.fetch();
+
+  const targetMembers = members.filter(m =>
+    !m.user.bot &&
+    (
+      data.targets.includes("all") ||
+      m.roles.cache.some(r =>
+        data.targets.some(t => isSameCompany(r.name, t))
+      )
+    )
+  );
+
+  const buttons = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("confirm")
+      .setLabel("Confirm")
+      .setStyle(ButtonStyle.Success),
+
+    new ButtonBuilder()
+      .setCustomId("back")
+      .setLabel("✏️ Edit")
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId("cancel")
+      .setLabel("Cancel")
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  await data.message.edit({
+    content:
+      `📢 **Preview**\n\n` +
+      `🎯 Targets: ${data.targets.join(", ")}\n` +
+      `👥 Users: ${targetMembers.size}\n\n` +
+      `💬 ${text}`,
+    components: [buttons]
+  });
+
+  session.set(interaction.user.id, {
+    ...data,
+    messageContent: text,
+    targetMembers
+  });
+
+  return;
+}
+
+
+// BACK → EDIT TARGETS
+if (interaction.isButton() && interaction.customId === "back") {
+
+  const data = session.get(interaction.user.id);
+  if (!data) return;
+
+  const dropdown = await buildDropdown(interaction.guild, data.targets);
+
+  return interaction.update({
+    content: "🎯 Select companies:",
+    components: [new ActionRowBuilder().addComponents(dropdown)]
+  });
+}
+
+
+// CANCEL
+if (interaction.isButton() && interaction.customId === "cancel") {
+  session.delete(interaction.user.id);
+
+  return interaction.update({
+    content: "❌ Broadcast cancelled.",
+    components: []
+  });
+}
+
+
+// CONFIRM SEND
+if (interaction.isButton() && interaction.customId === "confirm") {
+
+  const data = session.get(interaction.user.id);
+  if (!data) return;
+
+  const { targetMembers, messageContent, message, targets } = data;
+
+  await interaction.update({
+    content: `🚀 Sending to ${targetMembers.size} users...`,
+    components: []
+  });
+
+  let i = 0;
+  let success = 0;
+
+  for (const m of targetMembers.values()) {
+    i++;
+
+    try {
+      await m.send({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db)
+            .setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update")
+            .setDescription(messageContent)
+            .setFooter({ text: "Inter Molds, Inc." })
+            .setTimestamp()
+        ]
+      });
+
+      success++;
+
+    } catch (e) {}
+
+    // progress update
+    if (i % 2 === 0 || i === targetMembers.size) {
+      await message.edit({
+        content: `🚀 Sending... (${i}/${targetMembers.size})`
+      });
+    }
+  }
+
+  await message.edit({
+    content:
+      `✅ **Broadcast Completed**\n` +
+      `🎯 Targets: ${targets.join(", ")}\n` +
+      `👥 Sent: ${success}`
+  });
+
+  session.delete(interaction.user.id);
+
+  return;
+}
 
 // =========================
 // DM SYSTEM (UNCHANGED)
