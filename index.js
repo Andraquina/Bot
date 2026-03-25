@@ -389,6 +389,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         await member.send(`✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉`).catch(() => {});
         await member.send({ embeds: [new EmbedBuilder().setTitle("📜 Rules").setDescription("Follow rules.").setColor(0xF1C40F)] }).catch(() => {});
+
         
         // 2. Send the Standalone Message (The one you want in the chat)
         await interaction.channel.send({ content: `✅ Approved **${name}** from **${company}**` });
@@ -417,7 +418,6 @@ client.on(Events.InteractionCreate, async interaction => {
     }
   } catch (err) {
     console.error("Interaction Error:", err);
-  }
 });
 
 // =========================
