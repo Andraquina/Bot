@@ -34,6 +34,7 @@ const session = new Map();
 const guildMemberCache = new Map();
 const repliedUsers = new Set();
 const onboardingData = new Map();
+const processingUsers = new Set(); // Prevents double-processing/crashes
 
 // =========================
 // 🚀 ON READY & REGISTER
@@ -51,7 +52,7 @@ client.once(Events.ClientReady, async () => {
       { body: commands }
     );
     console.log("✅ Commands registered");
-  } catch (error) { console.error(error); }
+  } catch (error) { console.error("Registration Error:", error); }
 });
 
 // =========================
@@ -139,6 +140,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     if (interaction.isButton()) {
+      // 1. OPEN ONBOARDING
       if (interaction.customId === 'open_onboarding_modal') {
         const modal = new ModalBuilder().setCustomId('onboarding_modal').setTitle('Company Registration');
         modal.addComponents(
@@ -148,49 +150,47 @@ client.on(Events.InteractionCreate, async interaction => {
         return await interaction.showModal(modal);
       }
 
+      // 2. APPROVAL / DENIAL
       if (interaction.customId.startsWith('approve_') || interaction.customId.startsWith('deny_')) {
         const [action, userId] = interaction.customId.split('_');
+        
+        if (processingUsers.has(userId)) return interaction.reply({ content: "This request is already being processed.", flags: [4096] });
         const data = onboardingData.get(userId);
-        if (!data) return interaction.reply({ content: "Session expired.", flags: [4096] });
-
-        const member = await interaction.guild.members.fetch(userId).catch(() => null);
+        if (!data) return interaction.reply({ content: "Session not found or expired.", flags: [4096] });
 
         if (action === 'approve') {
-          if (!member) return interaction.reply({ content: "User left server.", flags: [4096] });
+          processingUsers.add(userId); // LOCK
+          const member = await interaction.guild.members.fetch(userId).catch(() => null);
+          if (!member) {
+            processingUsers.delete(userId);
+            return interaction.reply({ content: "User is no longer in the server.", flags: [4096] });
+          }
           
           const cleanName = formatTitleCase(data.name);
           const cleanCompany = formatTitleCase(data.company);
           const acronym = getAcronym(cleanCompany);
 
-          // 1. DELETE WELCOME MESSAGE IMMEDIATELY
+          // --- NUCLEAR CLEANUP START ---
           if (data.welcomeMsgId && data.welcomeChannelId) {
             const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
             if (welcomeChan) {
-              try {
-                const msg = await welcomeChan.messages.fetch(data.welcomeMsgId);
-                if (msg) await msg.delete();
-              } catch (e) { console.log("Message already deleted or not found."); }
-              
-              // Hide channel from the individual user immediately
+              await welcomeChan.messages.fetch(data.welcomeMsgId).then(m => m.delete()).catch(() => null);
               await welcomeChan.permissionOverwrites.create(member.id, { ViewChannel: false }).catch(() => null);
             }
           }
+          // --- NUCLEAR CLEANUP END ---
 
-          // 2. Nickname
+          // Nickname & Role
           await member.setNickname(`${cleanName} | ${acronym}`).catch(() => null);
-
-          // 3. Role
           let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, cleanCompany));
           if (!role) role = await interaction.guild.roles.create({ name: cleanCompany, color: 0x3498db });
           await member.roles.add(role);
 
-          // 4. Double-Lock: Hide Welcome channel from the new role too
-          if (data.welcomeChannelId) {
-             const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
-             if (welcomeChan) await welcomeChan.permissionOverwrites.create(role.id, { ViewChannel: false }).catch(() => null);
-          }
+          // Hidden from Welcome Channel via Role as well
+          const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
+          if (welcomeChan) await welcomeChan.permissionOverwrites.create(role.id, { ViewChannel: false }).catch(() => null);
 
-          // 5. Create Company Channels
+          // CREATE CATEGORY
           const category = await interaction.guild.channels.create({
             name: cleanCompany,
             type: ChannelType.GuildCategory,
@@ -200,27 +200,82 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
+          // CREATE TEXT (General) - RE-ADDED ALL PERMISSIONS
           await interaction.guild.channels.create({
             name: `general`,
             type: ChannelType.GuildText,
             parent: category.id,
             permissionOverwrites: [
               { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-              { id: role.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }
+              {
+                id: role.id,
+                allow: [
+                  PermissionsBitField.Flags.ViewChannel,
+                  PermissionsBitField.Flags.SendMessages,
+                  PermissionsBitField.Flags.SendMessagesInThreads,
+                  PermissionsBitField.Flags.CreatePublicThreads,
+                  PermissionsBitField.Flags.EmbedLinks,
+                  PermissionsBitField.Flags.AttachFiles,
+                  PermissionsBitField.Flags.AddReactions,
+                  PermissionsBitField.Flags.UseExternalStickers,
+                  PermissionsBitField.Flags.PinMessages,
+                  PermissionsBitField.Flags.ReadMessageHistory,
+                  PermissionsBitField.Flags.SendTTSMessages,
+                  PermissionsBitField.Flags.SendVoiceMessages,
+                  PermissionsBitField.Flags.CreatePolls
+                ],
+                deny: [
+                  PermissionsBitField.Flags.ManageChannels,
+                  PermissionsBitField.Flags.ManageRoles,
+                  PermissionsBitField.Flags.ManageWebhooks,
+                  PermissionsBitField.Flags.CreatePrivateThreads,
+                  PermissionsBitField.Flags.ManageMessages,
+                  PermissionsBitField.Flags.ManageThreads,
+                  PermissionsBitField.Flags.MentionEveryone
+                ]
+              }
             ]
           });
 
+          // CREATE VOICE (Voice Call) - RE-ADDED ALL PERMISSIONS
           await interaction.guild.channels.create({
             name: `Voice Call`,
             type: ChannelType.GuildVoice,
             parent: category.id,
             permissionOverwrites: [
               { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-              { id: role.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.Speak] }
+              {
+                id: role.id,
+                allow: [
+                  PermissionsBitField.Flags.ViewChannel,
+                  PermissionsBitField.Flags.Connect,
+                  PermissionsBitField.Flags.Speak,
+                  PermissionsBitField.Flags.Stream,
+                  PermissionsBitField.Flags.UseVAD,
+                  PermissionsBitField.Flags.PrioritySpeaker,
+                  PermissionsBitField.Flags.SendMessages,
+                  PermissionsBitField.Flags.EmbedLinks,
+                  PermissionsBitField.Flags.AttachFiles,
+                  PermissionsBitField.Flags.AddReactions,
+                  PermissionsBitField.Flags.UseExternalEmojis,
+                  PermissionsBitField.Flags.UseExternalStickers,
+                  PermissionsBitField.Flags.ReadMessageHistory,
+                  PermissionsBitField.Flags.SendTTSMessages,
+                  PermissionsBitField.Flags.SendVoiceMessages,
+                  PermissionsBitField.Flags.CreatePolls
+                ],
+                deny: [
+                  PermissionsBitField.Flags.MuteMembers,
+                  PermissionsBitField.Flags.DeafenMembers,
+                  PermissionsBitField.Flags.MoveMembers,
+                  PermissionsBitField.Flags.ManageChannels,
+                  PermissionsBitField.Flags.ManageRoles
+                ]
+              }
             ]
           });
 
-          // 6. DM RULES (Separated for spacing)
+          // DM RULES (Restored Styling)
           try {
             const now = new Date();
             const rulesEmbed = new EmbedBuilder()
@@ -232,19 +287,21 @@ client.on(Events.InteractionCreate, async interaction => {
                 iconURL: interaction.guild.iconURL() 
               });
             
-            await member.send(`✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉`);
+            await member.send(`✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉\n\u200B`);
             await member.send({ embeds: [rulesEmbed] });
           } catch (e) { console.log("DM failed."); }
 
           await interaction.update({ content: `✅ Approved ${cleanName}`, components: [] });
+          onboardingData.delete(userId);
+          processingUsers.delete(userId); // UNLOCK
         } else {
           await interaction.update({ content: `❌ Denied ${data.name}`, components: [] });
+          onboardingData.delete(userId);
         }
-        onboardingData.delete(userId);
         return;
       }
 
-      // BROADCAST (Initial Logic Restored)
+      // --- BROADCAST FLOW (FULL RESTORATION) ---
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         await interaction.reply({
@@ -259,14 +316,17 @@ client.on(Events.InteractionCreate, async interaction => {
 
       const bData = session.get(interaction.user.id);
       if (!bData) return;
+
       if (interaction.customId === "cancel") {
         session.delete(interaction.user.id);
         return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
+
       if (interaction.customId === "back") {
         const dropdown = await buildDropdown(interaction.guild, bData.targets);
         return interaction.update({ content: "🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)] });
       }
+
       if (interaction.customId === "confirm") {
         const { targetMembers, messageContent, message, targets } = bData;
         await interaction.update({ content: `🚀 Sending... (0/${targetMembers.size})`, components: [] });
@@ -334,7 +394,14 @@ client.on(Events.InteractionCreate, async interaction => {
         session.set(interaction.user.id, { ...data, messageContent: text, targetMembers });
       }
     }
-  } catch (err) { console.error("Error:", err); }
+  } catch (err) { console.error("General Error:", err); }
+});
+
+client.on(Events.MessageCreate, async (message) => {
+  if (message.author.bot || message.guild) return;
+  if (repliedUsers.has(message.author.id)) return;
+  await message.reply("📩 **Inter Molds System**\nThis bot is for notifications only.");
+  repliedUsers.add(message.author.id);
 });
 
 client.login(process.env.TOKEN);
