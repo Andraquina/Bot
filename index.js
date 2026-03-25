@@ -33,7 +33,6 @@ const client = new Client({
 // STATE
 // =========================
 const session = new Map();
-const guildMemberCache = new Map();
 const repliedUsers = new Set();
 const onboardingData = new Map();
 const processingUsers = new Set();
@@ -143,7 +142,7 @@ client.on(Events.InteractionCreate, async interaction => {
   try {
 
     // =========================
-    // BROADCAST COMMAND
+    // BROADCAST PANEL
     // =========================
     if (interaction.isChatInputCommand() && interaction.commandName === "setup-broadcast") {
 
@@ -177,12 +176,14 @@ client.on(Events.InteractionCreate, async interaction => {
               .setCustomId('user_name')
               .setLabel('Your Name')
               .setStyle(TextInputStyle.Short)
+              .setRequired(true)
           ),
           new ActionRowBuilder().addComponents(
             new TextInputBuilder()
               .setCustomId('company_name')
               .setLabel('Company')
               .setStyle(TextInputStyle.Short)
+              .setRequired(true)
           )
         );
 
@@ -208,13 +209,13 @@ client.on(Events.InteractionCreate, async interaction => {
           const cleanCompany = formatTitleCase(data.company);
           const acronym = getAcronym(cleanCompany);
 
-          const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
+          const welcomeChan = data.welcomeChannelId
+            ? interaction.guild.channels.cache.get(data.welcomeChannelId)
+            : null;
 
           // ROLE
           let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, cleanCompany));
-          if (!role) {
-            role = await interaction.guild.roles.create({ name: cleanCompany });
-          }
+          if (!role) role = await interaction.guild.roles.create({ name: cleanCompany });
 
           await member.roles.add(role);
           await member.setNickname(`${cleanName} | ${acronym}`);
@@ -226,7 +227,7 @@ client.on(Events.InteractionCreate, async interaction => {
             await welcomeChan.permissionOverwrites.edit(member.id, { ViewChannel: false });
           }
 
-          // CHANNELS (FIXED)
+          // CREATE CHANNELS
           const category = await interaction.guild.channels.create({
             name: cleanCompany,
             type: ChannelType.GuildCategory,
@@ -274,10 +275,9 @@ client.on(Events.InteractionCreate, async interaction => {
       }
 
       // =========================
-      // BROADCAST FLOW (UNCHANGED)
+      // BROADCAST START
       // =========================
       if (interaction.customId === "start_broadcast") {
-
         const dropdown = await buildDropdown(interaction.guild);
 
         const msg = await interaction.reply({
@@ -292,7 +292,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // =========================
-    // MODALS
+    // MODAL SUBMIT
     // =========================
     if (interaction.isModalSubmit()) {
 
@@ -301,7 +301,12 @@ client.on(Events.InteractionCreate, async interaction => {
         const name = interaction.fields.getTextInputValue('user_name');
         const company = interaction.fields.getTextInputValue('company_name');
 
-        onboardingData.set(interaction.user.id, { name, company });
+        // ✅ FIXED (merge instead of overwrite)
+        onboardingData.set(interaction.user.id, {
+          ...onboardingData.get(interaction.user.id),
+          name,
+          company
+        });
 
         const adminChan = interaction.guild.channels.cache.find(c =>
           c.name.toLowerCase().includes("admin")
@@ -333,9 +338,7 @@ client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot || message.guild) return;
   if (repliedUsers.has(message.author.id)) return;
 
-  await message.reply(
-    "📩 **Inter Molds System**\nThis bot is for notifications only."
-  );
+  await message.reply("📩 **Inter Molds System**\nThis bot is for notifications only.");
 
   repliedUsers.add(message.author.id);
 });
