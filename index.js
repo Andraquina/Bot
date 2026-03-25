@@ -34,7 +34,7 @@ const session = new Map();
 const guildMemberCache = new Map();
 const repliedUsers = new Set();
 const onboardingData = new Map();
-const processingUsers = new Set(); // Prevents double-processing/crashes
+const processingUsers = new Set(); 
 
 // =========================
 // 🚀 ON READY & REGISTER
@@ -140,7 +140,6 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     if (interaction.isButton()) {
-      // 1. OPEN ONBOARDING
       if (interaction.customId === 'open_onboarding_modal') {
         const modal = new ModalBuilder().setCustomId('onboarding_modal').setTitle('Company Registration');
         modal.addComponents(
@@ -150,35 +149,24 @@ client.on(Events.InteractionCreate, async interaction => {
         return await interaction.showModal(modal);
       }
 
-      // 2. APPROVAL / DENIAL
       if (interaction.customId.startsWith('approve_') || interaction.customId.startsWith('deny_')) {
         const [action, userId] = interaction.customId.split('_');
         
-        if (processingUsers.has(userId)) return interaction.reply({ content: "This request is already being processed.", flags: [4096] });
+        if (processingUsers.has(userId)) return interaction.reply({ content: "Processing...", flags: [4096] });
         const data = onboardingData.get(userId);
-        if (!data) return interaction.reply({ content: "Session not found or expired.", flags: [4096] });
+        if (!data) return interaction.reply({ content: "Session expired.", flags: [4096] });
 
         if (action === 'approve') {
-          processingUsers.add(userId); // LOCK
+          processingUsers.add(userId);
           const member = await interaction.guild.members.fetch(userId).catch(() => null);
           if (!member) {
             processingUsers.delete(userId);
-            return interaction.reply({ content: "User is no longer in the server.", flags: [4096] });
+            return interaction.reply({ content: "User left server.", flags: [4096] });
           }
           
           const cleanName = formatTitleCase(data.name);
           const cleanCompany = formatTitleCase(data.company);
           const acronym = getAcronym(cleanCompany);
-
-          // --- NUCLEAR CLEANUP START ---
-          if (data.welcomeMsgId && data.welcomeChannelId) {
-            const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
-            if (welcomeChan) {
-              await welcomeChan.messages.fetch(data.welcomeMsgId).then(m => m.delete()).catch(() => null);
-              await welcomeChan.permissionOverwrites.create(member.id, { ViewChannel: false }).catch(() => null);
-            }
-          }
-          // --- NUCLEAR CLEANUP END ---
 
           // Nickname & Role
           await member.setNickname(`${cleanName} | ${acronym}`).catch(() => null);
@@ -186,11 +174,7 @@ client.on(Events.InteractionCreate, async interaction => {
           if (!role) role = await interaction.guild.roles.create({ name: cleanCompany, color: 0x3498db });
           await member.roles.add(role);
 
-          // Hidden from Welcome Channel via Role as well
-          const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
-          if (welcomeChan) await welcomeChan.permissionOverwrites.create(role.id, { ViewChannel: false }).catch(() => null);
-
-          // CREATE CATEGORY
+          // CREATE CHANNELS (Using Numeric Bitfields to avoid BitFieldInvalid errors)
           const category = await interaction.guild.channels.create({
             name: cleanCompany,
             type: ChannelType.GuildCategory,
@@ -200,100 +184,49 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // CREATE TEXT (General) - RE-ADDED ALL PERMISSIONS
+          // Text Channel (General)
           await interaction.guild.channels.create({
             name: `general`,
             type: ChannelType.GuildText,
             parent: category.id,
             permissionOverwrites: [
               { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-              {
-                id: role.id,
-                allow: [
-                  PermissionsBitField.Flags.ViewChannel,
-                  PermissionsBitField.Flags.SendMessages,
-                  PermissionsBitField.Flags.SendMessagesInThreads,
-                  PermissionsBitField.Flags.CreatePublicThreads,
-                  PermissionsBitField.Flags.EmbedLinks,
-                  PermissionsBitField.Flags.AttachFiles,
-                  PermissionsBitField.Flags.AddReactions,
-                  PermissionsBitField.Flags.UseExternalStickers,
-                  PermissionsBitField.Flags.PinMessages,
-                  PermissionsBitField.Flags.ReadMessageHistory,
-                  PermissionsBitField.Flags.SendTTSMessages,
-                  PermissionsBitField.Flags.SendVoiceMessages,
-                  PermissionsBitField.Flags.CreatePolls
-                ],
-                deny: [
-                  PermissionsBitField.Flags.ManageChannels,
-                  PermissionsBitField.Flags.ManageRoles,
-                  PermissionsBitField.Flags.ManageWebhooks,
-                  PermissionsBitField.Flags.CreatePrivateThreads,
-                  PermissionsBitField.Flags.ManageMessages,
-                  PermissionsBitField.Flags.ManageThreads,
-                  PermissionsBitField.Flags.MentionEveryone
-                ]
-              }
+              { id: role.id, allow: [8192n, 2048n, 32768n, 16384n, 131072n, 65536n, 524288n, 1048576n, 34359738368n] } // Safe Numeric Flags
             ]
           });
 
-          // CREATE VOICE (Voice Call) - RE-ADDED ALL PERMISSIONS
+          // Voice Channel
           await interaction.guild.channels.create({
             name: `Voice Call`,
             type: ChannelType.GuildVoice,
             parent: category.id,
             permissionOverwrites: [
               { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-              {
-                id: role.id,
-                allow: [
-                  PermissionsBitField.Flags.ViewChannel,
-                  PermissionsBitField.Flags.Connect,
-                  PermissionsBitField.Flags.Speak,
-                  PermissionsBitField.Flags.Stream,
-                  PermissionsBitField.Flags.UseVAD,
-                  PermissionsBitField.Flags.PrioritySpeaker,
-                  PermissionsBitField.Flags.SendMessages,
-                  PermissionsBitField.Flags.EmbedLinks,
-                  PermissionsBitField.Flags.AttachFiles,
-                  PermissionsBitField.Flags.AddReactions,
-                  PermissionsBitField.Flags.UseExternalEmojis,
-                  PermissionsBitField.Flags.UseExternalStickers,
-                  PermissionsBitField.Flags.ReadMessageHistory,
-                  PermissionsBitField.Flags.SendTTSMessages,
-                  PermissionsBitField.Flags.SendVoiceMessages,
-                  PermissionsBitField.Flags.CreatePolls
-                ],
-                deny: [
-                  PermissionsBitField.Flags.MuteMembers,
-                  PermissionsBitField.Flags.DeafenMembers,
-                  PermissionsBitField.Flags.MoveMembers,
-                  PermissionsBitField.Flags.ManageChannels,
-                  PermissionsBitField.Flags.ManageRoles
-                ]
-              }
+              { id: role.id, allow: [1048576n, 2097152n, 4194304n, 512n, 256n, 16777216n] } // Safe Numeric Flags
             ]
           });
 
-          // DM RULES (Restored Styling)
+          // --- CLEANUP & HIDE WELCOME ---
+          if (data.welcomeMsgId && data.welcomeChannelId) {
+            const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
+            if (welcomeChan) {
+              await welcomeChan.messages.fetch(data.welcomeMsgId).then(m => m.delete()).catch(() => null);
+              await welcomeChan.permissionOverwrites.create(member.id, { ViewChannel: false }).catch(() => null);
+              await welcomeChan.permissionOverwrites.create(role.id, { ViewChannel: false }).catch(() => null);
+            }
+          }
+
+          // DM Rules
           try {
             const now = new Date();
-            const rulesEmbed = new EmbedBuilder()
-              .setColor(0xF1C40F)
-              .setTitle('📜 Company Rules')
-              .setDescription('──────────────\n\n**1. Be respectful**\n**2. No spam**\n**3. Follow all guidelines**\n**4. Keep discussions professional**\n**5. Respect privacy**\n\n──────────────')
-              .setFooter({ 
-                text: `Inter Molds, Inc. • ${now.toLocaleDateString('pt-PT')} ${now.toLocaleTimeString('pt-PT', {hour: '2-digit', minute:'2-digit'})}`, 
-                iconURL: interaction.guild.iconURL() 
-              });
-            
+            const rulesEmbed = new EmbedBuilder().setColor(0xF1C40F).setTitle('📜 Company Rules').setDescription('──────────────\n\n**1. Be respectful**\n**2. No spam**\n**3. Follow all guidelines**\n**4. Keep discussions professional**\n**5. Respect privacy**\n\n──────────────').setFooter({ text: `Inter Molds, Inc. • ${now.toLocaleDateString('pt-PT')} ${now.toLocaleTimeString('pt-PT', {hour: '2-digit', minute:'2-digit'})}`, iconURL: interaction.guild.iconURL() });
             await member.send(`✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉\n\u200B`);
             await member.send({ embeds: [rulesEmbed] });
-          } catch (e) { console.log("DM failed."); }
+          } catch (e) {}
 
           await interaction.update({ content: `✅ Approved ${cleanName}`, components: [] });
           onboardingData.delete(userId);
-          processingUsers.delete(userId); // UNLOCK
+          processingUsers.delete(userId); 
         } else {
           await interaction.update({ content: `❌ Denied ${data.name}`, components: [] });
           onboardingData.delete(userId);
@@ -301,14 +234,10 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // --- BROADCAST FLOW (FULL RESTORATION) ---
+      // --- BROADCAST LOGIC ---
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
-        await interaction.reply({
-          content: "🎯 Select companies:",
-          components: [new ActionRowBuilder().addComponents(dropdown)],
-          withResponse: true
-        });
+        await interaction.reply({ content: "🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)], withResponse: true });
         const msg = await interaction.fetchReply();
         session.set(interaction.user.id, { message: msg });
         return;
@@ -334,14 +263,7 @@ client.on(Events.InteractionCreate, async interaction => {
         for (const m of targetMembers.values()) {
           i++;
           try {
-            await m.send({
-              embeds: [new EmbedBuilder()
-                .setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db)
-                .setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update")
-                .setDescription(messageContent)
-                .setFooter({ text: "Inter Molds, Inc." })
-                .setTimestamp()]
-            });
+            await m.send({ embeds: [new EmbedBuilder().setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db).setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update").setDescription(messageContent).setFooter({ text: "Inter Molds, Inc." }).setTimestamp()] });
             success++;
           } catch (e) {}
           if (i % 2 === 0 || i === targetMembers.size) await message.edit({ content: `🚀 Sending... (${i}/${targetMembers.size})` });
@@ -364,14 +286,10 @@ client.on(Events.InteractionCreate, async interaction => {
         const name = interaction.fields.getTextInputValue('user_name');
         const company = interaction.fields.getTextInputValue('company_name');
         onboardingData.set(interaction.user.id, { name, company });
-
         const adminChan = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("admin") && c.type === ChannelType.GuildText);
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId(`deny_${interaction.user.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger)
-        );
+        const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`deny_${interaction.user.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger));
         await adminChan.send({ content: `🔔 **New Request**\n**User:** <@${interaction.user.id}>\n**Name:** ${name}\n**Company:** ${company}`, components: [row] });
-        return interaction.reply({ content: "✅ Request sent to admins.", flags: [4096] });
+        return interaction.reply({ content: "✅ Request sent.", flags: [4096] });
       }
 
       if (interaction.customId === "broadcast_modal") {
@@ -380,21 +298,12 @@ client.on(Events.InteractionCreate, async interaction => {
         const text = interaction.fields.getTextInputValue("message");
         const members = await interaction.guild.members.fetch();
         const targetMembers = members.filter(m => !m.user.bot && (data.targets.includes("all") || m.roles.cache.some(r => data.targets.some(t => isSameCompany(r.name, t)))));
-        
-        const buttons = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId("back").setLabel("✏️ Edit").setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
-        );
-
-        await data.message.edit({ 
-          content: `📢 **Preview**\n\n🎯 Targets: ${data.targets.join(", ")}\n👥 Users: ${targetMembers.size}\n\n💬 ${text}`, 
-          components: [buttons] 
-        });
+        const buttons = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId("back").setLabel("✏️ Edit").setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger));
+        await data.message.edit({ content: `📢 **Preview**\n\n🎯 Targets: ${data.targets.join(", ")}\n👥 Users: ${targetMembers.size}\n\n💬 ${text}`, components: [buttons] });
         session.set(interaction.user.id, { ...data, messageContent: text, targetMembers });
       }
     }
-  } catch (err) { console.error("General Error:", err); }
+  } catch (err) { console.error("Error:", err); }
 });
 
 client.on(Events.MessageCreate, async (message) => {
