@@ -417,7 +417,6 @@ client.on(Events.InteractionCreate, async interaction => {
         // Delete the original request message
         await interaction.message.delete().catch(() => {});
       }
-      }
     }
   } catch (err) {
     console.error("Interaction Error:", err);
