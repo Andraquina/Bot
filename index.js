@@ -36,6 +36,7 @@ const session = new Map();
 const repliedUsers = new Set();
 const onboardingData = new Map();
 const processingUsers = new Set();
+const guildMemberCache = new Map();
 
 // =========================
 // READY
@@ -63,14 +64,18 @@ client.once(Events.ClientReady, async () => {
 });
 
 // =========================
-// HELPERS
+// 🧠 HELPERS
 // =========================
-function normalize(str) { return str.toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function normalize(str) {
+  return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
 
 function formatWords(str) {
   if (!str) return "";
-  return str.toLowerCase().split(/\s+/).filter(w => w.length > 0)
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  return str.toLowerCase().split(/\s+/)
+    .filter(w => w.length > 0)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
 }
 
 function getAcronym(company) {
@@ -80,7 +85,8 @@ function getAcronym(company) {
 }
 
 function isSameCompany(a, b) {
-  const na = normalize(a); const nb = normalize(b);
+  const na = normalize(a);
+  const nb = normalize(b);
   return na.includes(nb) || nb.includes(na);
 }
 
@@ -88,8 +94,8 @@ async function buildDropdown(guild, selected = []) {
   await guild.roles.fetch();
   const roles = guild.roles.cache
     .filter(r => r.name !== "@everyone" && !r.managed)
-    .map(r => r.name).slice(0, 25);
-
+    .map(r => r.name)
+    .slice(0, 25);
   return new StringSelectMenuBuilder()
     .setCustomId("select_companies")
     .setPlaceholder("Select companies")
@@ -97,19 +103,39 @@ async function buildDropdown(guild, selected = []) {
     .setMaxValues(Math.min(roles.length + 1, 25))
     .addOptions([
       { label: "ALL", value: "all", default: selected.includes("all") },
-      ...roles.map(r => ({ label: r, value: r, default: selected.includes(r) }))
+      ...roles.map(r => ({
+        label: r,
+        value: r,
+        default: selected.includes(r)
+      }))
     ]);
+}
+
+async function createPanel(channel) {
+  const button = new ButtonBuilder()
+    .setCustomId("start_broadcast")
+    .setLabel("📢 Start Broadcast")
+    .setStyle(ButtonStyle.Primary);
+  return await channel.send({
+    content: "📢 **Broadcast Panel**\nClick below to start:",
+    components: [new ActionRowBuilder().addComponents(button)]
+  });
 }
 
 // =========================
 // JOIN
 // =========================
 client.on(Events.GuildMemberAdd, async member => {
-  const channel = member.guild.channels.cache.find(c => c.name.toLowerCase().includes("welcome"));
+  const channel = member.guild.channels.cache.find(c =>
+    c.name.toLowerCase().includes("welcome")
+  );
   if (!channel) return;
 
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('open_onboarding_modal').setLabel('Start Setup').setStyle(ButtonStyle.Primary)
+    new ButtonBuilder()
+      .setCustomId('open_onboarding_modal')
+      .setLabel('Start Setup')
+      .setStyle(ButtonStyle.Primary)
   );
 
   const msg = await channel.send({
@@ -117,21 +143,118 @@ client.on(Events.GuildMemberAdd, async member => {
     components: [row]
   });
 
-  onboardingData.set(member.id, { welcomeMsgId: msg.id, welcomeChannelId: channel.id });
+  onboardingData.set(member.id, {
+    welcomeMsgId: msg.id,
+    welcomeChannelId: channel.id
+  });
 });
 
 // =========================
-// INTERACTIONS
+// 📋 INTERACTIONS
 // =========================
 client.on(Events.InteractionCreate, async interaction => {
   try {
+    // SETUP PANEL
     if (interaction.isChatInputCommand() && interaction.commandName === "setup-broadcast") {
-      const btn = new ButtonBuilder().setCustomId("start_broadcast").setLabel("📢 Start Broadcast").setStyle(ButtonStyle.Primary);
-      await interaction.channel.send({ content: "📢 **Broadcast Panel**", components: [new ActionRowBuilder().addComponents(btn)] });
-      return interaction.reply({ content: "✅ Panel created.", ephemeral: true });
+      await createPanel(interaction.channel);
+      return interaction.reply({
+        content: "✅ Panel created. (Tip: pin it)",
+        ephemeral: true
+      });
     }
 
+    // START BROADCAST BUTTON
+    if (interaction.isButton() && interaction.customId === "start_broadcast") {
+      const dropdown = await buildDropdown(interaction.guild);
+      const msg = await interaction.reply({
+        content: "🎯 Select companies:",
+        components: [new ActionRowBuilder().addComponents(dropdown)]
+      });
+      session.set(interaction.user.id, { message: msg });
+      return;
+    }
+
+    // ONBOARDING MODAL TRIGGER
+    if (interaction.isButton() && interaction.customId === 'open_onboarding_modal') {
+        const modal = new ModalBuilder()
+          .setCustomId('onboarding_modal')
+          .setTitle('Setup');
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_name').setLabel('Name').setStyle(TextInputStyle.Short).setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('company_name').setLabel('Company').setStyle(TextInputStyle.Short).setRequired(true))
+        );
+        return interaction.showModal(modal);
+    }
+
+    // DROPDOWN SELECTION
+    if (interaction.isStringSelectMenu()) {
+      const data = session.get(interaction.user.id) || {};
+      session.set(interaction.user.id, {
+        ...data,
+        targets: interaction.values
+      });
+      const modal = new ModalBuilder()
+        .setCustomId("broadcast_modal")
+        .setTitle("Broadcast Message");
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("message")
+            .setLabel("Message")
+            .setStyle(TextInputStyle.Paragraph)
+            .setRequired(true)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("delay")
+            .setLabel("Delay (10m optional)")
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false)
+        )
+      );
+      await interaction.showModal(modal);
+      return;
+    }
+
+    // MODAL SUBMISSIONS
     if (interaction.isModalSubmit()) {
+      // BROADCAST PREVIEW
+      if (interaction.customId === "broadcast_modal") {
+        await interaction.deferUpdate();
+        const data = session.get(interaction.user.id);
+        if (!data) return;
+        const messageContent = interaction.fields.getTextInputValue("message");
+        const targets = data.targets;
+        
+        let members = guildMemberCache.get(interaction.guild.id);
+        if (!members) {
+          members = await interaction.guild.members.fetch();
+          guildMemberCache.set(interaction.guild.id, members);
+        }
+        
+        const targetMembers = members.filter(m =>
+          !m.user.bot && (targets.includes("all") || m.roles.cache.some(r => targets.some(t => isSameCompany(r.name, t))))
+        );
+        
+        const buttons = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId("back").setLabel("✏️ Edit").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
+        );
+        
+        await data.message.edit({
+          content: `📢 **Preview**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Users: ${targetMembers.size}\n\n💬 ${messageContent}`,
+          components: [buttons]
+        });
+        
+        session.set(interaction.user.id, {
+          ...data,
+          messageContent,
+          targetMembers
+        });
+      }
+
+      // ONBOARDING SUBMIT
       if (interaction.customId === 'onboarding_modal') {
         const name = interaction.fields.getTextInputValue('user_name');
         const company = interaction.fields.getTextInputValue('company_name');
@@ -145,85 +268,83 @@ client.on(Events.InteractionCreate, async interaction => {
           new ButtonBuilder().setCustomId(`deny_${interaction.user.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger)
         );
 
-        await adminChannel.send({
-          content: `🚨 **New Registration Request**\n\n**User:** <@${interaction.user.id}>\n**Name:** ${name}\n**Company:** ${company}`,
-          components: [row]
-        });
-
-        const data = onboardingData.get(interaction.user.id);
-        if (data?.welcomeMsgId && data?.welcomeChannelId) {
-          const welcomeChannel = interaction.guild.channels.cache.get(data.welcomeChannelId);
-          if (welcomeChannel) welcomeChannel.messages.fetch(data.welcomeMsgId).then(m => m.delete().catch(() => {}));
+        await adminChannel.send({ content: `🚨 New request\n\nUser: <@${interaction.user.id}>\nName: ${name}\nCompany: ${company}`, components: [row] });
+        
+        // Auto-delete welcome message
+        const entry = onboardingData.get(interaction.user.id);
+        if (entry?.welcomeMsgId) {
+          const welcomeChannel = interaction.guild.channels.cache.get(entry.welcomeChannelId);
+          if (welcomeChannel) welcomeChannel.messages.fetch(entry.welcomeMsgId).then(m => m.delete().catch(() => {}));
         }
+
         return interaction.reply({ content: "✅ Sent to admins.", ephemeral: true });
-      }
-
-      // BROADCAST MODAL (FIXED TO MOVE FORWARD)
-      if (interaction.customId === "broadcast_modal") {
-        await interaction.deferUpdate();
-        const data = session.get(interaction.user.id);
-        if (!data) return;
-
-        const text = interaction.fields.getTextInputValue("message");
-        const delayStr = interaction.fields.getTextInputValue("delay") || "0";
-        const delay = parseInt(delayStr) || 0;
-
-        const members = await interaction.guild.members.fetch();
-        const targetMembers = members.filter(m =>
-          !m.user.bot && (data.targets.includes("all") || m.roles.cache.some(r => data.targets.some(t => isSameCompany(r.name, t))))
-        );
-
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId("back").setLabel("✏️ Edit").setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
-        );
-
-        await data.message.edit({
-          content: `📢 **Preview** (Targets: ${targetMembers.size} | Delay: ${delay}s)\nTargets: ${data.targets.join(", ")}\n\nMessage: ${text}`,
-          components: [row]
-        });
-
-        session.set(interaction.user.id, { ...data, messageContent: text, targetMembers, delay });
       }
     }
 
+    // BUTTONS (CONFIRM / BACK / CANCEL / APPROVE)
     if (interaction.isButton()) {
-      if (interaction.customId === 'open_onboarding_modal') {
-        const modal = new ModalBuilder().setCustomId('onboarding_modal').setTitle('Inter Molds Registration');
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_name').setLabel('Full Name').setStyle(TextInputStyle.Short).setRequired(true)),
-          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('company_name').setLabel('Company Name').setStyle(TextInputStyle.Short).setRequired(true))
-        );
-        return interaction.showModal(modal);
+      const data = session.get(interaction.user.id);
+
+      // BROADCAST CANCEL
+      if (interaction.customId === "cancel" && data) {
+        session.delete(interaction.user.id);
+        return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
 
+      // BROADCAST BACK/EDIT
+      if (interaction.customId === "back" && data) {
+        const dropdown = await buildDropdown(interaction.guild, data.targets);
+        session.set(interaction.user.id, { message: data.message });
+        return interaction.update({
+          content: "🎯 Select companies:",
+          components: [new ActionRowBuilder().addComponents(dropdown)]
+        });
+      }
+
+      // BROADCAST CONFIRM
+      if (interaction.customId === "confirm" && data) {
+        const { targetMembers, messageContent, message, targets } = data;
+        await interaction.update({
+          content: `🚀 Sending... (0/${targetMembers.size})`,
+          components: []
+        });
+        let i = 0; let success = 0; let failed = 0;
+        for (const member of targetMembers.values()) {
+          i++;
+          try {
+            await member.send({
+              embeds: [new EmbedBuilder().setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db).setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update").setDescription(messageContent).setFooter({ text: "Inter Molds, Inc." }).setTimestamp()]
+            });
+            success++;
+          } catch { failed++; }
+          if (i % 2 === 0 || i === targetMembers.size) {
+            await message.edit({ content: `🚀 Sending... (${i}/${targetMembers.size})` });
+          }
+        }
+        await message.edit({
+          content: `✅ **Broadcast Completed**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Sent: ${success}\n❌ Failed: ${failed}\n\n💬 ${messageContent}`
+        });
+        session.delete(interaction.user.id);
+      }
+
+      // APPROVE ACTION
       if (interaction.customId.startsWith("approve_")) {
         const userId = interaction.customId.split("_")[1];
         const data = onboardingData.get(userId);
         if (!data) return interaction.reply({ content: "❌ Session expired.", ephemeral: true });
 
-        await interaction.deferUpdate();
+        await interaction.deferReply({ ephemeral: true });
         const member = await interaction.guild.members.fetch(userId);
         const name = formatWords(data.name);
         const company = formatWords(data.company);
 
         let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, company));
-        if (!role) role = await interaction.guild.roles.create({ name: company, color: 0x3498db });
+        if (!role) role = await interaction.guild.roles.create({ name: company });
 
         await member.roles.add(role);
-        await member.setNickname(`${name} | ${getAcronym(company)}`).catch(() => {});
+        await member.setNickname(`${name} | ${getAcronym(company)}`);
 
-        // NUCLEAR WIPE WELCOME
-        const welcomeChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("welcome"));
-        if (welcomeChannel) {
-          const newChannel = await welcomeChannel.clone();
-          await welcomeChannel.delete().catch(() => {});
-          await newChannel.setPosition(welcomeChannel.position);
-          await newChannel.permissionOverwrites.create(role.id, { ViewChannel: false });
-        }
-
-        // CREATE CHANNELS WITH SPECIFIC PERMS
+        // Create Channels with Restricted Perms
         const category = await interaction.guild.channels.create({
           name: company,
           type: ChannelType.GuildCategory,
@@ -233,112 +354,48 @@ client.on(Events.InteractionCreate, async interaction => {
           ]
         });
 
-        const basicAllow = [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages,
-          PermissionsBitField.Flags.ReadMessageHistory,
-          PermissionsBitField.Flags.AttachFiles,
-          PermissionsBitField.Flags.EmbedLinks,
-          PermissionsBitField.Flags.AddReactions,
-          PermissionsBitField.Flags.Connect,
-          PermissionsBitField.Flags.Speak,
-          PermissionsBitField.Flags.Stream
-        ];
+        const basicPerms = [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.AddReactions, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.Speak];
+        const restrictPerms = [PermissionsBitField.Flags.MentionEveryone, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.ManageChannels];
 
-        const strictDeny = [
-          PermissionsBitField.Flags.MentionEveryone,
-          PermissionsBitField.Flags.ManageMessages,
-          PermissionsBitField.Flags.ManageChannels,
-          PermissionsBitField.Flags.ManageRoles,
-          PermissionsBitField.Flags.ManageWebhooks
-        ];
+        await interaction.guild.channels.create({ name: 'general', type: ChannelType.GuildText, parent: category.id, permissionOverwrites: [{ id: role.id, allow: basicPerms, deny: restrictPerms }] });
+        await interaction.guild.channels.create({ name: 'Voice Call', type: ChannelType.GuildVoice, parent: category.id, permissionOverwrites: [{ id: role.id, allow: basicPerms }] });
 
-        await interaction.guild.channels.create({ 
-          name: 'general', 
-          type: ChannelType.GuildText, 
-          parent: category.id,
-          permissionOverwrites: [{ id: role.id, allow: basicAllow, deny: strictDeny }] 
-        });
-
-        await interaction.guild.channels.create({ 
-          name: 'Voice Call', 
-          type: ChannelType.GuildVoice, 
-          parent: category.id,
-          permissionOverwrites: [{ id: role.id, allow: basicAllow, deny: strictDeny }] 
-        });
+        // Clone and wipe welcome
+        const welcomeChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("welcome"));
+        if (welcomeChannel) {
+          const newChannel = await welcomeChannel.clone();
+          await welcomeChannel.delete().catch(() => {});
+          await newChannel.setPosition(welcomeChannel.position);
+          await newChannel.permissionOverwrites.create(role.id, { ViewChannel: false });
+        }
 
         await member.send(`✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉`).catch(() => {});
-        await member.send({ embeds: [new EmbedBuilder().setTitle("📜 Rules").setDescription("• Be respectful\n• No spam\n• Stay professional").setColor(0xF1C40F)] }).catch(() => {});
+        await member.send({ embeds: [new EmbedBuilder().setTitle("📜 Rules").setDescription("Follow rules.").setColor(0xF1C40F)] }).catch(() => {});
 
-        await interaction.channel.send({ content: `✅ Approved **${name}** from **${company}**` });
+        await interaction.editReply({ content: `✅ Approved ${name} from ${company}` });
         await interaction.message.delete().catch(() => {});
       }
 
-      if (interaction.customId === "start_broadcast") {
-        await interaction.deferReply({ ephemeral: true });
-        const dropdown = await buildDropdown(interaction.guild);
-        const reply = await interaction.editReply({ content: "🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)] });
-        session.set(interaction.user.id, { message: reply });
-      }
-
-      if (interaction.customId === "confirm") {
-        const data = session.get(interaction.user.id);
-        if (!data) return;
-        const { targetMembers, messageContent, message, targets, delay = 0 } = data;
-
-        await interaction.update({ content: `🚀 Sending... (0/${targetMembers.size})`, components: [] });
-
-        let i = 0; let success = 0; let failed = 0;
-        for (const m of targetMembers.values()) {
-          i++;
-          try {
-            await m.send({
-              embeds: [new EmbedBuilder().setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db).setTitle("📢 Announcement").setDescription(messageContent).setFooter({ text: "Inter Molds, Inc." }).setTimestamp()]
-            });
-            success++;
-          } catch { failed++; }
-          if (delay > 0) await new Promise(r => setTimeout(r, delay * 1000));
-          if (i % 2 === 0 || i === targetMembers.size) await message.edit({ content: `🚀 Sending... (${i}/${targetMembers.size})` });
-        }
-
-        await message.edit({ 
-          content: null, 
-          embeds: [new EmbedBuilder().setTitle("✅ Broadcast Completed").setDescription(`🎯 Targets: ${targets.join(", ")}\n👤 Sent: ${success}\n❌ Failed: ${failed}\n\nMessage: ${messageContent}`).setColor(0x2ecc71)] 
-        });
-        session.delete(interaction.user.id);
-      }
-
-      if (interaction.customId === "back") {
-        const data = session.get(interaction.user.id);
-        const dropdown = await buildDropdown(interaction.guild, data.targets);
-        return interaction.update({ content: "🎯 Select targets:", components: [new ActionRowBuilder().addComponents(dropdown)] });
-      }
-      if (interaction.customId === "cancel") {
-        session.delete(interaction.user.id);
-        return interaction.update({ content: "❌ Cancelled.", components: [] });
+      // DENY ACTION
+      if (interaction.customId.startsWith("deny_")) {
+        const userId = interaction.customId.split("_")[1];
+        await interaction.message.delete().catch(() => {});
+        return interaction.reply({ content: `❌ Denied access for <@${userId}>`, ephemeral: true });
       }
     }
-
-    if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
-      const data = session.get(interaction.user.id) || {};
-      session.set(interaction.user.id, { ...data, targets: interaction.values });
-
-      const modal = new ModalBuilder().setCustomId("broadcast_modal").setTitle("Broadcast Message");
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("message").setLabel("Message").setStyle(TextInputStyle.Paragraph).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("delay").setLabel("Delay (seconds)").setStyle(TextInputStyle.Short).setValue("0").setRequired(false))
-      );
-      return interaction.showModal(modal);
-    }
-
-  } catch (err) { console.error(err); }
+  } catch (err) {
+    console.error(err);
+  }
 });
 
+// =========================
+// DM SYSTEM
+// =========================
 client.on(Events.MessageCreate, async msg => {
   if (msg.guild || msg.author.bot) return;
   if (repliedUsers.has(msg.author.id)) return;
   repliedUsers.add(msg.author.id);
-  await msg.reply("📩 **Inter Molds System**\nThis bot is for notifications only. Please contact an admin if needed.");
+  await msg.reply("📩 **Inter Molds System**\nThis bot is for notifications only. Please contact an administrator.");
 });
 
 client.login(process.env.TOKEN);
