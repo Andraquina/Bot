@@ -392,16 +392,31 @@ client.on(Events.InteractionCreate, async interaction => {
         await member.send(`✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉`).catch(() => {});
         await member.send({ embeds: [new EmbedBuilder().setTitle("📜 Rules").setDescription("Follow rules.").setColor(0xF1C40F)] }).catch(() => {});
 
+        // 2. Send the Standalone Message (The one that stays in the chat)
         await interaction.channel.send({ content: `✅ Approved **${name}** from **${company}**` });
-        await interaction.editReply({ content: `✅ Setup for ${name} is complete.` });
+
+        // 3. Delete the "thinking" message so it disappears from the admin's screen
+        await interaction.deleteReply().catch(() => {});
+        
+        // 4. Delete the original request message with the buttons
         await interaction.message.delete().catch(() => {});
+
+        // DMs to the user
+        await member.send(`✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉`).catch(() => {});
+        await member.send({ embeds: [new EmbedBuilder().setTitle("📜 Rules").setDescription("Follow rules.").setColor(0xF1C40F)] }).catch(() => {});
       }
 
       // DENY ACTION
       if (interaction.customId.startsWith("deny_")) {
         const userId = interaction.customId.split("_")[1];
-        await interaction.reply({ content: `❌ Denied access for <@${userId}>`, ephemeral: true });
+        
+        // Use a hidden reply then delete it immediately to resolve the interaction without leaving a trace
+        await interaction.reply({ content: "❌ Denying...", ephemeral: true });
+        await interaction.deleteReply().catch(() => {});
+        
+        // Delete the original request message
         await interaction.message.delete().catch(() => {});
+      }
       }
     }
   } catch (err) {
