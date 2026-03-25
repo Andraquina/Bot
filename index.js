@@ -196,13 +196,6 @@ client.on(Events.InteractionCreate, async interaction => {
           await member.roles.add(role);
           await member.setNickname(`${cleanName} | ${acronym}`);
 
-          // Hide welcome
-          if (welcomeChan) {
-            await welcomeChan.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false });
-            await welcomeChan.permissionOverwrites.edit(role.id, { ViewChannel: false });
-            await welcomeChan.permissionOverwrites.edit(member.id, { ViewChannel: false });
-          }
-
           // Create category + channels with proper permissions
           const category = await interaction.guild.channels.create({
             name: cleanCompany,
