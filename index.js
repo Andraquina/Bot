@@ -157,56 +157,27 @@ client.on(Events.InteractionCreate, async interaction => {
         if (!data) return interaction.reply({ content: "Session expired.", flags: [4096] });
 
         if (action === 'approve') {
+          // 1. DEFER IMMEDIATELY (Prevents 10062 Error)
+          await interaction.deferUpdate();
           processingUsers.add(userId);
+
           const member = await interaction.guild.members.fetch(userId).catch(() => null);
           if (!member) {
             processingUsers.delete(userId);
-            return interaction.reply({ content: "User left server.", flags: [4096] });
+            return;
           }
           
           const cleanName = formatTitleCase(data.name);
           const cleanCompany = formatTitleCase(data.company);
           const acronym = getAcronym(cleanCompany);
 
-          // Nickname & Role
+          // 2. NICKNAME & ROLE FIRST (Highest Priority)
           await member.setNickname(`${cleanName} | ${acronym}`).catch(() => null);
           let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, cleanCompany));
-          if (!role) role = await interaction.guild.roles.create({ name: cleanCompany, color: 0x3498db });
+          if (!role) role = await interaction.guild.roles.create({ name: cleanCompany }); 
           await member.roles.add(role);
 
-          // CREATE CHANNELS (Using Numeric Bitfields to avoid BitFieldInvalid errors)
-          const category = await interaction.guild.channels.create({
-            name: cleanCompany,
-            type: ChannelType.GuildCategory,
-            permissionOverwrites: [
-              { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-              { id: role.id, allow: [PermissionsBitField.Flags.ViewChannel] }
-            ]
-          });
-
-          // Text Channel (General)
-          await interaction.guild.channels.create({
-            name: `general`,
-            type: ChannelType.GuildText,
-            parent: category.id,
-            permissionOverwrites: [
-              { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-              { id: role.id, allow: [8192n, 2048n, 32768n, 16384n, 131072n, 65536n, 524288n, 1048576n, 34359738368n] } // Safe Numeric Flags
-            ]
-          });
-
-          // Voice Channel
-          await interaction.guild.channels.create({
-            name: `Voice Call`,
-            type: ChannelType.GuildVoice,
-            parent: category.id,
-            permissionOverwrites: [
-              { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-              { id: role.id, allow: [1048576n, 2097152n, 4194304n, 512n, 256n, 16777216n] } // Safe Numeric Flags
-            ]
-          });
-
-          // --- CLEANUP & HIDE WELCOME ---
+          // 3. NUCLEAR CLEANUP (Welcome Message & Hiding)
           if (data.welcomeMsgId && data.welcomeChannelId) {
             const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
             if (welcomeChan) {
@@ -216,7 +187,39 @@ client.on(Events.InteractionCreate, async interaction => {
             }
           }
 
-          // DM Rules
+          // 4. CREATE CHANNELS (Numeric Bitfields to prevent crash)
+          try {
+            const category = await interaction.guild.channels.create({
+              name: cleanCompany,
+              type: ChannelType.GuildCategory,
+              permissionOverwrites: [
+                { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                { id: role.id, allow: [PermissionsBitField.Flags.ViewChannel] }
+              ]
+            });
+
+            await interaction.guild.channels.create({
+              name: `general`,
+              type: ChannelType.GuildText,
+              parent: category.id,
+              permissionOverwrites: [
+                { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                { id: role.id, allow: [8192n, 2048n, 32768n, 16384n, 131072n, 65536n, 524288n, 1048576n, 34359738368n] }
+              ]
+            });
+
+            await interaction.guild.channels.create({
+              name: `Voice Call`,
+              type: ChannelType.GuildVoice,
+              parent: category.id,
+              permissionOverwrites: [
+                { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                { id: role.id, allow: [1048576n, 2097152n, 4194304n, 512n, 256n, 16777216n] }
+              ]
+            });
+          } catch (e) { console.error("Channel Create Error:", e); }
+
+          // 5. DM RULES
           try {
             const now = new Date();
             const rulesEmbed = new EmbedBuilder().setColor(0xF1C40F).setTitle('📜 Company Rules').setDescription('──────────────\n\n**1. Be respectful**\n**2. No spam**\n**3. Follow all guidelines**\n**4. Keep discussions professional**\n**5. Respect privacy**\n\n──────────────').setFooter({ text: `Inter Molds, Inc. • ${now.toLocaleDateString('pt-PT')} ${now.toLocaleTimeString('pt-PT', {hour: '2-digit', minute:'2-digit'})}`, iconURL: interaction.guild.iconURL() });
@@ -224,7 +227,8 @@ client.on(Events.InteractionCreate, async interaction => {
             await member.send({ embeds: [rulesEmbed] });
           } catch (e) {}
 
-          await interaction.update({ content: `✅ Approved ${cleanName}`, components: [] });
+          // Final update to the admin button
+          await interaction.editReply({ content: `✅ Approved ${cleanName}`, components: [] });
           onboardingData.delete(userId);
           processingUsers.delete(userId); 
         } else {
@@ -234,7 +238,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // --- BROADCAST LOGIC ---
+      // BROADCAST
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         await interaction.reply({ content: "🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)], withResponse: true });
@@ -246,37 +250,28 @@ client.on(Events.InteractionCreate, async interaction => {
       const bData = session.get(interaction.user.id);
       if (!bData) return;
 
-      if (interaction.customId === "cancel") {
-        session.delete(interaction.user.id);
-        return interaction.update({ content: "❌ Cancelled.", components: [] });
-      }
-
-      if (interaction.customId === "back") {
-        const dropdown = await buildDropdown(interaction.guild, bData.targets);
-        return interaction.update({ content: "🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)] });
-      }
-
       if (interaction.customId === "confirm") {
         const { targetMembers, messageContent, message, targets } = bData;
-        await interaction.update({ content: `🚀 Sending... (0/${targetMembers.size})`, components: [] });
+        await interaction.update({ content: `🚀 Sending...`, components: [] });
         let i = 0; let success = 0;
         for (const m of targetMembers.values()) {
           i++;
           try {
-            await m.send({ embeds: [new EmbedBuilder().setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db).setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update").setDescription(messageContent).setFooter({ text: "Inter Molds, Inc." }).setTimestamp()] });
+            await m.send({ embeds: [new EmbedBuilder().setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db).setTitle("📢 Update").setDescription(messageContent).setFooter({ text: "Inter Molds, Inc." }).setTimestamp()] });
             success++;
           } catch (e) {}
           if (i % 2 === 0 || i === targetMembers.size) await message.edit({ content: `🚀 Sending... (${i}/${targetMembers.size})` });
         }
-        await message.edit({ content: `✅ **Broadcast Completed**\n👥 Sent: ${success}` });
+        await message.edit({ content: `✅ Sent: ${success}` });
         session.delete(interaction.user.id);
       }
+      if (interaction.customId === "cancel") { session.delete(interaction.user.id); return interaction.update({ content: "❌ Cancelled.", components: [] }); }
     }
 
     if (interaction.isStringSelectMenu()) {
       const data = session.get(interaction.user.id) || {};
       session.set(interaction.user.id, { ...data, targets: interaction.values });
-      const modal = new ModalBuilder().setCustomId("broadcast_modal").setTitle("Broadcast Message");
+      const modal = new ModalBuilder().setCustomId("broadcast_modal").setTitle("Message");
       modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("message").setLabel("Message").setStyle(TextInputStyle.Paragraph)));
       await interaction.showModal(modal);
     }
@@ -289,7 +284,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const adminChan = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("admin") && c.type === ChannelType.GuildText);
         const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`deny_${interaction.user.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger));
         await adminChan.send({ content: `🔔 **New Request**\n**User:** <@${interaction.user.id}>\n**Name:** ${name}\n**Company:** ${company}`, components: [row] });
-        return interaction.reply({ content: "✅ Request sent.", flags: [4096] });
+        return interaction.reply({ content: "✅ Sent to admins.", flags: [4096] });
       }
 
       if (interaction.customId === "broadcast_modal") {
@@ -299,18 +294,11 @@ client.on(Events.InteractionCreate, async interaction => {
         const members = await interaction.guild.members.fetch();
         const targetMembers = members.filter(m => !m.user.bot && (data.targets.includes("all") || m.roles.cache.some(r => data.targets.some(t => isSameCompany(r.name, t)))));
         const buttons = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId("back").setLabel("✏️ Edit").setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger));
-        await data.message.edit({ content: `📢 **Preview**\n\n🎯 Targets: ${data.targets.join(", ")}\n👥 Users: ${targetMembers.size}\n\n💬 ${text}`, components: [buttons] });
+        await data.message.edit({ content: `📢 Previewing for ${targetMembers.size} users:\n\n${text}`, components: [buttons] });
         session.set(interaction.user.id, { ...data, messageContent: text, targetMembers });
       }
     }
   } catch (err) { console.error("Error:", err); }
-});
-
-client.on(Events.MessageCreate, async (message) => {
-  if (message.author.bot || message.guild) return;
-  if (repliedUsers.has(message.author.id)) return;
-  await message.reply("📩 **Inter Molds System**\nThis bot is for notifications only.");
-  repliedUsers.add(message.author.id);
 });
 
 client.login(process.env.TOKEN);
