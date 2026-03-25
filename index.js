@@ -166,10 +166,12 @@ client.on(Events.InteractionCreate, async interaction => {
           if (data.welcomeMsgId && data.welcomeChannelId) {
             const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
             if (welcomeChan) {
-              const msg = await welcomeChan.messages.fetch(data.welcomeMsgId).catch(() => null);
-              if (msg) await msg.delete().catch(() => null);
+              try {
+                const msg = await welcomeChan.messages.fetch(data.welcomeMsgId);
+                if (msg) await msg.delete();
+              } catch (e) { console.log("Message already deleted or not found."); }
               
-              // HIDDEN FROM USER
+              // Hide channel from the individual user immediately
               await welcomeChan.permissionOverwrites.create(member.id, { ViewChannel: false }).catch(() => null);
             }
           }
@@ -177,18 +179,18 @@ client.on(Events.InteractionCreate, async interaction => {
           // 2. Nickname
           await member.setNickname(`${cleanName} | ${acronym}`).catch(() => null);
 
-          // 3. Role & Hide Welcome Channel from Role
+          // 3. Role
           let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, cleanCompany));
           if (!role) role = await interaction.guild.roles.create({ name: cleanCompany, color: 0x3498db });
           await member.roles.add(role);
 
-          // Double Lock: Hide welcome channel from the new role too
-          const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
-          if (welcomeChan) {
-            await welcomeChan.permissionOverwrites.create(role.id, { ViewChannel: false }).catch(() => null);
+          // 4. Double-Lock: Hide Welcome channel from the new role too
+          if (data.welcomeChannelId) {
+             const welcomeChan = interaction.guild.channels.cache.get(data.welcomeChannelId);
+             if (welcomeChan) await welcomeChan.permissionOverwrites.create(role.id, { ViewChannel: false }).catch(() => null);
           }
 
-          // 4. Company Channels
+          // 5. Create Company Channels
           const category = await interaction.guild.channels.create({
             name: cleanCompany,
             type: ChannelType.GuildCategory,
@@ -218,7 +220,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // 5. DM RULES
+          // 6. DM RULES (Separated for spacing)
           try {
             const now = new Date();
             const rulesEmbed = new EmbedBuilder()
@@ -230,9 +232,7 @@ client.on(Events.InteractionCreate, async interaction => {
                 iconURL: interaction.guild.iconURL() 
               });
             
-            // Send accepted message
             await member.send(`✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉`);
-            // Send rules in separate message for clean spacing
             await member.send({ embeds: [rulesEmbed] });
           } catch (e) { console.log("DM failed."); }
 
@@ -244,7 +244,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // BROADCAST (Updated withResponse)
+      // BROADCAST (Initial Logic Restored)
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         await interaction.reply({
@@ -335,13 +335,6 @@ client.on(Events.InteractionCreate, async interaction => {
       }
     }
   } catch (err) { console.error("Error:", err); }
-});
-
-client.on(Events.MessageCreate, async (message) => {
-  if (message.author.bot || message.guild) return;
-  if (repliedUsers.has(message.author.id)) return;
-  await message.reply("📩 **Inter Molds System**\nThis bot is for notifications only.");
-  repliedUsers.add(message.author.id);
 });
 
 client.login(process.env.TOKEN);
