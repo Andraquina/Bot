@@ -317,11 +317,15 @@ client.on(Events.InteractionCreate, async interaction => {
             await message.edit({ content: `🚀 Sending... (${i}/${targetMembers.size})` });
           }
         }
-        await message.edit({
-          content: null,
-          embeds: [new EmbedBuilder().setTitle("✅ **Broadcast Completed**").setDescription(`🎯 Targets: ${targets.join(", ")}\n👤 Sent: ${success}\n❌ Failed: ${failed}\n\nMessage: ${messageContent}`).setColor(0x2ecc71)]
-        });
-        session.delete(interaction.user.id);
+        // Independent standalone result message
+          await interaction.channel.send({
+            content: `✅ **Broadcast Completed**\n\n🎯 Targets: ${targets.join(", ")}\n👤 Sent: ${success}\n❌ Failed: ${failed}\n\n💬 ${messageContent}`
+          });
+
+          await message.delete().catch(() => {});
+          session.delete(interaction.user.id);
+          return;
+        }
       }
 
       if (interaction.customId.startsWith("approve_")) {
@@ -386,7 +390,7 @@ client.on(Events.InteractionCreate, async interaction => {
         await member.send(`✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉`).catch(() => {});
         await member.send({ embeds: [new EmbedBuilder().setTitle("📜 Rules").setDescription("Follow rules.").setColor(0xF1C40F)] }).catch(() => {});
 
-        await interaction.editReply({ content: `✅ Approved ${name} from ${company}` });
+        await interaction.channel.send({ content: `✅ Approved **${name}** from **${company}**` });
         await interaction.message.delete().catch(() => {});
       }
 
