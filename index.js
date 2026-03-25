@@ -418,7 +418,8 @@ client.on(Events.InteractionCreate, async interaction => {
     }
   } catch (err) {
     console.error("Interaction Error:", err);
-});
+  };
+
 
 // =========================
 // DM SYSTEM
