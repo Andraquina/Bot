@@ -140,7 +140,7 @@ client.on(Events.GuildMemberAdd, async member => {
 client.on(Events.InteractionCreate, async interaction => {
   try {
 
-    // SLASH
+    // SLASH COMMAND
     if (interaction.isChatInputCommand() && interaction.commandName === "setup-broadcast") {
       const button = new ButtonBuilder()
         .setCustomId("start_broadcast")
@@ -199,12 +199,10 @@ client.on(Events.InteractionCreate, async interaction => {
           await member.roles.add(role);
           await member.setNickname(`${cleanName} | ${acronym}`);
 
-          // HIDE WELCOME
           if (welcomeChan) {
             await welcomeChan.permissionOverwrites.edit(role.id, { ViewChannel: false }).catch(()=>{});
           }
 
-          // CREATE CHANNELS
           const category = await interaction.guild.channels.create({
             name: cleanCompany,
             type: ChannelType.GuildCategory,
@@ -247,14 +245,12 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           });
 
-          // WIPE WELCOME
           if (welcomeChan) {
             const newChannel = await welcomeChan.clone();
             await welcomeChan.delete();
             await newChannel.setPosition(welcomeChan.position);
           }
 
-          // DM
           await member.send(`✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉`);
 
           await interaction.editReply({
@@ -288,7 +284,6 @@ client.on(Events.InteractionCreate, async interaction => {
         session.set(interaction.user.id, { message: reply });
       }
 
-      // BACK
       if (interaction.customId === "back") {
         const data = session.get(interaction.user.id);
         const dropdown = await buildDropdown(interaction.guild, data.targets);
@@ -299,13 +294,11 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
-      // CANCEL
       if (interaction.customId === "cancel") {
         session.delete(interaction.user.id);
         return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
 
-      // CONFIRM
       if (interaction.customId === "confirm") {
         const data = session.get(interaction.user.id);
 
@@ -314,18 +307,15 @@ client.on(Events.InteractionCreate, async interaction => {
           components: []
         });
 
-        let i = 0;
         let success = 0;
 
         for (const m of data.targetMembers.values()) {
-          i++;
-
           try {
             await m.send({ embeds: [new EmbedBuilder().setDescription(data.messageContent)] });
             success++;
           } catch {}
 
-          await new Promise(r => setTimeout(r, 1000)); // delay
+          await new Promise(r => setTimeout(r, 1000));
         }
 
         await data.message.edit({
@@ -336,7 +326,7 @@ client.on(Events.InteractionCreate, async interaction => {
       }
     }
 
-    // SELECT
+    // SELECT MENU
     if (interaction.isStringSelectMenu()) {
       const data = session.get(interaction.user.id) || {};
       session.set(interaction.user.id, { ...data, targets: interaction.values });
@@ -354,10 +344,53 @@ client.on(Events.InteractionCreate, async interaction => {
       return interaction.showModal(modal);
     }
 
-    // MODAL
+    // MODALS
     if (interaction.isModalSubmit()) {
 
+      // ONBOARDING
+      if (interaction.customId === 'onboarding_modal') {
+
+        const name = interaction.fields.getTextInputValue('user_name');
+        const company = interaction.fields.getTextInputValue('company_name');
+
+        onboardingData.set(interaction.user.id, {
+          ...onboardingData.get(interaction.user.id),
+          name,
+          company
+        });
+
+        const adminChan = interaction.guild.channels.cache.find(c =>
+          c.name.toLowerCase().includes("admin") &&
+          c.type === ChannelType.GuildText
+        );
+
+        if (!adminChan) {
+          return interaction.reply({
+            content: "❌ Admin channel not found.",
+            ephemeral: true
+          });
+        }
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`deny_${interaction.user.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger)
+        );
+
+        await adminChan.send({
+          content:
+            `🚨 New company request\n\nUser: <@${interaction.user.id}>\nName: ${name}\nCompany: ${company}`,
+          components: [row]
+        });
+
+        return interaction.reply({
+          content: "✅ Request sent to admins.",
+          ephemeral: true
+        });
+      }
+
+      // BROADCAST MODAL
       if (interaction.customId === "broadcast_modal") {
+
         await interaction.deferReply();
 
         const data = session.get(interaction.user.id);
@@ -390,7 +423,6 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
-      // onboarding stays same (already working)
     }
 
   } catch (err) {
