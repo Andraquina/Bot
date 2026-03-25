@@ -156,7 +156,7 @@ client.on(Events.InteractionCreate, async interaction => {
         components: [new ActionRowBuilder().addComponents(button)]
       });
 
-      return interaction.reply({ content: "✅ Panel created.", flags: [4096] });
+      return interaction.reply({ content: "✅ Panel created.", ephemeral: true });
     }
 
     // =========================
@@ -213,7 +213,6 @@ client.on(Events.InteractionCreate, async interaction => {
             ? interaction.guild.channels.cache.get(data.welcomeChannelId)
             : null;
 
-          // ROLE
           let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, cleanCompany));
           if (!role) role = await interaction.guild.roles.create({ name: cleanCompany });
 
@@ -249,7 +248,7 @@ client.on(Events.InteractionCreate, async interaction => {
             parent: category.id
           });
 
-          // 🔥 WIPE WELCOME CHANNEL
+          // WIPE WELCOME CHANNEL
           if (welcomeChan) {
             const newChannel = await welcomeChan.clone();
             await welcomeChan.delete();
@@ -301,7 +300,6 @@ client.on(Events.InteractionCreate, async interaction => {
         const name = interaction.fields.getTextInputValue('user_name');
         const company = interaction.fields.getTextInputValue('company_name');
 
-        // ✅ FIXED (merge instead of overwrite)
         onboardingData.set(interaction.user.id, {
           ...onboardingData.get(interaction.user.id),
           name,
@@ -309,8 +307,16 @@ client.on(Events.InteractionCreate, async interaction => {
         });
 
         const adminChan = interaction.guild.channels.cache.find(c =>
-          c.name.toLowerCase().includes("admin")
+          c.name.toLowerCase().includes("admin") &&
+          c.type === ChannelType.GuildText
         );
+
+        if (!adminChan) {
+          return interaction.reply({
+            content: "❌ Admin channel not found.",
+            ephemeral: true
+          });
+        }
 
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success),
@@ -318,11 +324,14 @@ client.on(Events.InteractionCreate, async interaction => {
         );
 
         await adminChan.send({
-          content: `User: <@${interaction.user.id}>\nCompany: ${company}`,
+          content: `🔔 New Request\nUser: <@${interaction.user.id}>\nCompany: ${company}`,
           components: [row]
         });
 
-        return interaction.reply({ content: "Sent for approval.", flags: [4096] });
+        return interaction.reply({
+          content: "✅ Request sent to admins.",
+          ephemeral: true
+        });
       }
     }
 
