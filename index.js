@@ -226,7 +226,7 @@ client.on(Events.InteractionCreate, async interaction => {
         );
 
         await data.message.edit({
-          content: `🏗️ **Production Preview**\n\n🏢 **Company:** ${roleName}\n🆔 **Mold Name:** ${moldName}`,
+          content: `🏗️ **Production Preview**\n\n🏢 **Company:** ${roleName}\n🎰 **Mold Name:** ${moldName}`,
           components: [previewRow]
         });
 
@@ -277,11 +277,16 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      if (interaction.customId === "confirm_bc" && data) {
-        const delayMs = (parseInt(data.delay) || 0) * 1000;
-        await interaction.update({ content: `🚀 Sending broadcast...`, components: [] });
-        let success = 0;
-        for (const member of data.targetMembers.values()) {
+        if (interaction.customId === "confirm" && data) {
+                const { targetMembers, messageContent, message, targets } = data;
+                await interaction.update({
+                  content: `🚀 Sending... (0/${targetMembers.size})`,
+                  components: []
+                });
+        let i = 0; let success = 0; let failed = 0;
+        for (const member of targetMembers.values()) {
+          i++;
+
           try {
             await member.send({
               embeds: [new EmbedBuilder().setColor(0x3498db).setTitle("📢 Announcement").setDescription(data.messageContent).setFooter({ text: "Inter Molds, Inc." }).setTimestamp()]
@@ -305,7 +310,7 @@ client.on(Events.InteractionCreate, async interaction => {
           name: data.moldName, type: ChannelType.GuildText, parent: category.id,
           permissionOverwrites: [{ id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }, { id: role.id, allow: basicPerms, deny: [PermissionsBitField.Flags.MentionEveryone, PermissionsBitField.Flags.ManageMessages] }]
         });
-        await interaction.channel.send({ content: `✅ **Production Created**\n\n🏢 **Company:** ${role.name}\n🆔 **Mold ID:** ${data.moldName}\n📂 **Channel:** <#${newChan.id}>` });
+        await interaction.channel.send({ content: `✅ **Production Created**\n\n🏢 **Company:** ${role.name}\n🎰 **Mold ID:** ${data.moldName}` });
         await data.message.edit({ components: [] }).catch(() => {});
         await data.message.delete().catch(() => {});
         session.delete(interaction.user.id);
@@ -357,7 +362,27 @@ client.on(Events.InteractionCreate, async interaction => {
           await newChannel.setPosition(welcomeChannel.position);
           await newChannel.permissionOverwrites.create(role.id, { ViewChannel: false });
         }
-        const rules = new EmbedBuilder().setTitle("📜 Inter Molds | Guidelines").setColor(0xF1C40F).setDescription("**1. Account Setup:** Use company email.\n**2. Privacy:** Category is private.\n**3. Production:** Use dedicated mold channels.\n**4. Growth:** Same Company Name to merge.\n**5. Help:** DM Admin.");
+          const rules = new EmbedBuilder()
+          .setTitle("📜 Inter Molds | Server Guidelines")
+          .setColor(0xF1C40F)
+          .setDescription(
+            "**1. Account & Technical Setup**\n" +
+            "• Please ensure you login using your **official company email** to avoid future access issues.\n" +
+            "• For the best experience and reliable notifications, we strongly recommend **downloading the Discord app** (Desktop or Mobile) instead of using the browser.\n\n" +
+            "**2. Privacy & Communication**\n" +
+            "• All company-specific channels are **strictly private** and destined only for your organization.\n" +
+            "• If you have general questions, please use the `general` channel created for your company.\n\n" +
+            "**3. Mold Tracking & Production**\n" +
+            "• Admins will create a specific channel for every different mold/production.\n" +
+            "• Each channel will have an associated link; please keep the conversation in those channels **strictly related** to that specific production for easier access.\n\n" +
+            "**4. Team Members**\n" +
+            "• If more people from your company wish to join, they are welcome! Just ensure they use the **exact same company name** during their setup process.\n\n" +
+            "**5. Support & Updates**\n" +
+            "• For specific or private problems, you can **Direct Message (DM) an Admin** by clicking our avatar on the right side and selecting 'Send Message'.\n" +
+            "• Server updates will be notified via this Bot through DM. Please avoid accessing the server during those maintenance periods."
+          )
+          .setFooter({ text: "Inter Molds, Inc. - Professional Mold Solutions" });
+        
         await member.send({ embeds: [rules] }).catch(() => {});
         await interaction.channel.send({ content: `✅ Approved **${name}** from **${company}**` });
         onboardingData.delete(userId);
@@ -391,13 +416,33 @@ client.on(Events.InteractionCreate, async interaction => {
   } catch (err) { console.error("Error:", err); }
 });
 
-// DM Redirection
+
+
+// =========================
+// DM REDIRECTION
+// =========================
 client.on(Events.MessageCreate, async msg => {
   if (msg.guild || msg.author.bot) return;
   if (repliedUsers.has(msg.author.id)) return;
   repliedUsers.add(msg.author.id);
-  const dmEmbed = new EmbedBuilder().setColor(0x2F3136).setAuthor({ name: 'IMI | Inter Molds System', iconURL: client.user.displayAvatarURL() }).setTitle("✉️ Inter Molds System").setDescription("Notifications only. DM Admin.").setFooter({ text: "Official System" }).setTimestamp();
+
+  const dmEmbed = new EmbedBuilder()
+    .setColor(0x2F3136)
+    .setAuthor({ 
+      name: 'IMI | Inter Molds System', 
+      iconURL: client.user.displayAvatarURL() 
+    })
+    .setTitle("✉️ Inter Molds System")
+    .setDescription(
+      "This bot is used for notifications only.\n" +
+      "We do not receive or monitor messages sent here.\n\n" +
+      "If you need assistance, please contact us through our official channels."
+    )
+    .setFooter({ text: "Official System Notification" })
+    .setTimestamp();
+
   await msg.reply({ embeds: [dmEmbed] });
 });
+
 
 client.login(process.env.TOKEN);
