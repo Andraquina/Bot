@@ -251,6 +251,16 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.isButton()) {
       const data = session.get(interaction.user.id);
       
+      // FIXED ONBOARDING TRIGGER
+      if (interaction.customId === 'open_onboarding_modal') {
+        const modal = new ModalBuilder().setCustomId('onboarding_modal').setTitle('Setup');
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_name').setLabel('Name').setStyle(TextInputStyle.Short).setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('company_name').setLabel('Company').setStyle(TextInputStyle.Short).setRequired(true))
+        );
+        return interaction.showModal(modal);
+      }
+
       if (interaction.customId === "start_broadcast") {
         await interaction.deferUpdate();
         const dropdown = await buildDropdown(interaction.guild);
@@ -271,9 +281,7 @@ client.on(Events.InteractionCreate, async interaction => {
       }
 
       if (interaction.customId === "confirm_prod" && data) {
-        // 🔥 Fix: Acknowledge interaction first
         await interaction.update({ content: `🏗️ Creating channel...`, components: [] });
-        
         const { moldName, message } = data;
         const roleName = data.targets[0];
         const role = interaction.guild.roles.cache.find(r => r.name === roleName);
@@ -300,8 +308,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (interaction.customId === "confirm" && data) {
         const { targetMembers, messageContent, message, targets, delay } = data;
-        
-        // 🔥 Fix: Acknowledge interaction first
         await interaction.update({
           content: `🚀 Sending... (0/${targetMembers.size})`,
           components: []
