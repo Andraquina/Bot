@@ -131,7 +131,7 @@ async function createPanel(channel) {
 }
 
 // =========================
-// JOIN (5-Minute Idle Timer)
+// JOIN (Hardened 5-Minute Timer)
 // =========================
 client.on(Events.GuildMemberAdd, async member => {
   const channel = member.guild.channels.cache.find(c =>
@@ -151,25 +151,33 @@ client.on(Events.GuildMemberAdd, async member => {
     components: [row]
   });
 
+  // Added 'timestamp' to verify the 5-minute duration accurately
   onboardingData.set(member.id, {
     welcomeMsgId: msg.id,
     welcomeChannelId: channel.id,
-    status: 'idle' 
+    status: 'idle',
+    joinedAt: Date.now() 
   });
 
   setTimeout(async () => {
     const data = onboardingData.get(member.id);
+    // Double check: if still idle and it has been at least 295 seconds
     if (data && data.status === 'idle') {
-      try {
-        const welcomeChannel = member.guild.channels.cache.get(data.welcomeChannelId);
-        if (welcomeChannel) {
-          const m = await welcomeChannel.messages.fetch(data.welcomeMsgId).catch(() => null);
-          if (m) await m.delete().catch(() => {});
-        }
-        await member.kick("Onboarding timeout").catch(() => {});
-      } catch (e) {} finally { onboardingData.delete(member.id); }
+      const now = Date.now();
+      const diff = (now - data.joinedAt) / 1000;
+      
+      if (diff >= 290) { // Safety check to ensure we are near the 300s mark
+        try {
+          const welcomeChannel = member.guild.channels.cache.get(data.welcomeChannelId);
+          if (welcomeChannel) {
+            const m = await welcomeChannel.messages.fetch(data.welcomeMsgId).catch(() => null);
+            if (m) await m.delete().catch(() => {});
+          }
+          await member.kick("Onboarding timeout (5 minutes reached)").catch(() => {});
+        } catch (e) {} finally { onboardingData.delete(member.id); }
+      }
     }
-  }, 5 * 60 * 1000);
+  }, 300000); // 300,000ms = Exactly 5 Minutes
 });
 
 // =========================
@@ -242,14 +250,11 @@ client.on(Events.InteractionCreate, async interaction => {
         const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`deny_${interaction.user.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger));
         await adminChannel.send({ content: `🚨 New request\n\nUser: <@${interaction.user.id}>\nName: ${name}\nCompany: ${formattedCompany}`, components: [row] });
         
-        // NUCLEAR WIPE + HIDE WELCOME CHANNEL FOR THIS COMPANY ROLE
         const welcomeChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("welcome"));
         if (welcomeChannel) {
-          // Clear messages
           const messages = await welcomeChannel.messages.fetch({ limit: 100 });
           await welcomeChannel.bulkDelete(messages).catch(() => {});
           
-          // Fix: Fetch or Create the role now so we can turn the channel invisible for it immediately
           let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, formattedCompany));
           if (!role) {
             role = await interaction.guild.roles.create({ name: formattedCompany });
@@ -371,11 +376,9 @@ client.on(Events.InteractionCreate, async interaction => {
         const member = await interaction.guild.members.fetch(userId);
         const name = formatWords(onboard.name);
         const company = formatWords(onboard.company);
-        
         let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, company)) || await interaction.guild.roles.create({ name: company });
         await member.roles.add(role);
         await member.setNickname(`${name} | ${getAcronym(company)}`);
-        
         let category = interaction.guild.channels.cache.find(c => c.name === company && c.type === ChannelType.GuildCategory);
         if (!category) {
           category = await interaction.guild.channels.create({ name: company, type: ChannelType.GuildCategory, permissionOverwrites: [{ id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }, { id: role.id, allow: [PermissionsBitField.Flags.ViewChannel] }] });
@@ -384,10 +387,8 @@ client.on(Events.InteractionCreate, async interaction => {
           await interaction.guild.channels.create({ name: 'Voice Call', type: ChannelType.GuildVoice, parent: category.id, permissionOverwrites: [{ id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }, { id: role.id, allow: basic }] });
         }
         
-        // ACCEPTANCE DM
         await member.send(`✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉`).catch(() => {});
 
-        // RULES DM
         const rules = new EmbedBuilder()
           .setTitle("📜 Inter Molds | Server Guidelines")
           .setColor(0xF1C40F)
@@ -459,7 +460,7 @@ client.on(Events.MessageCreate, async msg => {
     .setTitle("✉️ Inter Molds System")
     .setDescription(
       "This bot is used for notifications only.\n" +
-      " We do not receive or monitor messages sent here.\n\n" +
+      "We do not receive or monitor messages sent here.\n\n" +
       "If you need assistance, please contact us through our official channels."
     )
     .setFooter({ text: "Official System Notification" })
