@@ -47,7 +47,10 @@ client.once(Events.ClientReady, async () => {
   const commands = [
     new SlashCommandBuilder()
       .setName('setup-broadcast')
-      .setDescription('Create broadcast panel')
+      .setDescription('Create broadcast panel'),
+    new SlashCommandBuilder()
+      .setName('create-production')
+      .setDescription('Create the permanent Production Channel button')
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -90,19 +93,19 @@ function isSameCompany(a, b) {
   return na.includes(nb) || nb.includes(na);
 }
 
-async function buildDropdown(guild, selected = []) {
+async function buildDropdown(guild, selected = [], customId = "select_companies") {
   await guild.roles.fetch();
   const roles = guild.roles.cache
     .filter(r => r.name !== "@everyone" && !r.managed)
     .map(r => r.name)
     .slice(0, 25);
   return new StringSelectMenuBuilder()
-    .setCustomId("select_companies")
-    .setPlaceholder("Select companies")
+    .setCustomId(customId)
+    .setPlaceholder("Select company")
     .setMinValues(1)
-    .setMaxValues(Math.min(roles.length + 1, 25))
+    .setMaxValues(customId === "prod_select" ? 1 : Math.min(roles.length + 1, 25))
     .addOptions([
-      { label: "ALL", value: "all", default: selected.includes("all") },
+      ...(customId === "prod_select" ? [] : [{ label: "ALL", value: "all", default: selected.includes("all") }]),
       ...roles.map(r => ({ label: r, value: r, default: selected.includes(r) }))
     ]);
 }
@@ -170,9 +173,16 @@ client.on(Events.GuildMemberAdd, async member => {
 // =========================
 client.on(Events.InteractionCreate, async interaction => {
   try {
-    if (interaction.isChatInputCommand() && interaction.commandName === "setup-broadcast") {
-      await createPanel(interaction.channel);
-      return interaction.reply({ content: "✅ Panel created.", ephemeral: true });
+    if (interaction.isChatInputCommand()) {
+      if (interaction.commandName === "setup-broadcast") {
+        await createPanel(interaction.channel);
+        return interaction.reply({ content: "✅ Panel created.", ephemeral: true });
+      }
+      if (interaction.commandName === "create-production") {
+        const btn = new ButtonBuilder().setCustomId("start_production").setLabel("🏗️ Create Production").setStyle(ButtonStyle.Success);
+        await interaction.channel.send({ content: "🏗️ **Production Panel**\nClick below to create a new Mold channel:", components: [new ActionRowBuilder().addComponents(btn)] });
+        return interaction.reply({ content: "✅ Production Panel created.", ephemeral: true });
+      }
     }
 
     if (interaction.isModalSubmit()) {
@@ -187,6 +197,33 @@ client.on(Events.InteractionCreate, async interaction => {
         const buttons = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId("back").setLabel("✏️ Edit").setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger));
         await data.message.edit({ content: `📢 **Preview**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Users: ${targetMembers.size}\n\nMessage: ${messageContent}`, components: [buttons] });
         session.set(interaction.user.id, { ...data, messageContent, targetMembers });
+      }
+
+      if (interaction.customId === "production_modal") {
+        await interaction.deferUpdate();
+        const data = session.get(interaction.user.id);
+        if (!data) return;
+        const moldName = interaction.fields.getTextInputValue("mold_name");
+        const roleName = data.targets[0];
+        const role = interaction.guild.roles.cache.find(r => r.name === roleName);
+        const category = interaction.guild.channels.cache.find(c => c.name === role.name && c.type === ChannelType.GuildCategory);
+
+        if (!category) return data.message.edit({ content: `❌ No category found for **${roleName}**.`, components: [] });
+
+        const basicPerms = [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.AddReactions, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.Speak];
+        const newChan = await interaction.guild.channels.create({
+          name: moldName,
+          type: ChannelType.GuildText,
+          parent: category.id,
+          permissionOverwrites: [
+            { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+            { id: role.id, allow: basicPerms, deny: [PermissionsBitField.Flags.MentionEveryone, PermissionsBitField.Flags.ManageMessages] }
+          ]
+        });
+        await newChan.send(`🏗️ **Production Channel Created**\nWelcome to the tracking channel for **${moldName}**.`);
+        await data.message.edit({ content: `✅ Created <#${newChan.id}> under **${roleName}**.`, components: [] });
+        setTimeout(() => data.message.delete().catch(() => {}), 5000);
+        session.delete(interaction.user.id);
       }
 
       if (interaction.customId === 'onboarding_modal') {
@@ -214,6 +251,13 @@ client.on(Events.InteractionCreate, async interaction => {
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         const msg = await interaction.reply({ content: "🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)], fetchReply: true });
+        session.set(interaction.user.id, { message: msg });
+        return;
+      }
+
+      if (interaction.customId === "start_production") {
+        const dropdown = await buildDropdown(interaction.guild, [], "prod_select");
+        const msg = await interaction.reply({ content: "🏗️ Select company role:", components: [new ActionRowBuilder().addComponents(dropdown)], fetchReply: true, ephemeral: true });
         session.set(interaction.user.id, { message: msg });
         return;
       }
@@ -289,18 +333,27 @@ client.on(Events.InteractionCreate, async interaction => {
       }
     }
 
-    if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
-      const data = session.get(interaction.user.id) || {};
-      session.set(interaction.user.id, { ...data, targets: interaction.values });
-      const modal = new ModalBuilder().setCustomId("broadcast_modal").setTitle("Message");
-      modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("message").setLabel("Message").setStyle(TextInputStyle.Paragraph).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("delay").setLabel("Delay").setStyle(TextInputStyle.Short).setRequired(false)));
-      await interaction.showModal(modal);
+    if (interaction.isStringSelectMenu()) {
+      if (interaction.customId === "select_companies" || interaction.customId === "prod_select") {
+        const data = session.get(interaction.user.id) || {};
+        session.set(interaction.user.id, { ...data, targets: interaction.values });
+        
+        if (interaction.customId === "select_companies") {
+          const modal = new ModalBuilder().setCustomId("broadcast_modal").setTitle("Message");
+          modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("message").setLabel("Message").setStyle(TextInputStyle.Paragraph).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("delay").setLabel("Delay").setStyle(TextInputStyle.Short).setRequired(false)));
+          await interaction.showModal(modal);
+        } else {
+          const modal = new ModalBuilder().setCustomId("production_modal").setTitle("Mold Details");
+          modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("mold_name").setLabel("Mold Name / ID").setStyle(TextInputStyle.Short).setRequired(true)));
+          await interaction.showModal(modal);
+        }
+      }
     }
   } catch (err) { console.error("Interaction Error:", err); }
 });
 
 // =========================
-// DM REDIRECTION (Photo Style)
+// DM REDIRECTION
 // =========================
 client.on(Events.MessageCreate, async msg => {
   if (msg.guild || msg.author.bot) return;
@@ -308,7 +361,7 @@ client.on(Events.MessageCreate, async msg => {
   repliedUsers.add(msg.author.id);
 
   const dmEmbed = new EmbedBuilder()
-    .setColor(0x2F3136) // Dark theme background matching photo
+    .setColor(0x2F3136)
     .setAuthor({ 
       name: 'IMI | Inter Molds System', 
       iconURL: client.user.displayAvatarURL() 
