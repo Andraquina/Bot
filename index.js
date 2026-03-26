@@ -230,21 +230,31 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (interaction.customId === 'onboarding_modal') {
         const name = interaction.fields.getTextInputValue('user_name');
-        const company = interaction.fields.getTextInputValue('company_name');
+        const companyInput = interaction.fields.getTextInputValue('company_name');
+        const formattedCompany = formatWords(companyInput);
+        
         const currentData = onboardingData.get(interaction.user.id) || {};
-        onboardingData.set(interaction.user.id, { ...currentData, name, company, status: 'submitted' });
+        onboardingData.set(interaction.user.id, { ...currentData, name, company: formattedCompany, status: 'submitted' });
 
         const adminChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("admin") && c.type === ChannelType.GuildText);
         if (!adminChannel) return interaction.reply({ content: "❌ Admin channel not found.", ephemeral: true });
 
         const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`deny_${interaction.user.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger));
-        await adminChannel.send({ content: `🚨 New request\n\nUser: <@${interaction.user.id}>\nName: ${name}\nCompany: ${company}`, components: [row] });
+        await adminChannel.send({ content: `🚨 New request\n\nUser: <@${interaction.user.id}>\nName: ${name}\nCompany: ${formattedCompany}`, components: [row] });
         
-        // FIXED timing: Wipe the welcome channel immediately upon submission
+        // NUCLEAR WIPE + HIDE WELCOME CHANNEL FOR THIS COMPANY ROLE
         const welcomeChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("welcome"));
         if (welcomeChannel) {
+          // Clear messages
           const messages = await welcomeChannel.messages.fetch({ limit: 100 });
           await welcomeChannel.bulkDelete(messages).catch(() => {});
+          
+          // Fix: Fetch or Create the role now so we can turn the channel invisible for it immediately
+          let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, formattedCompany));
+          if (!role) {
+            role = await interaction.guild.roles.create({ name: formattedCompany });
+          }
+          await welcomeChannel.permissionOverwrites.create(role.id, { ViewChannel: false });
         }
 
         return interaction.reply({ content: "✅ Information submitted. Please wait for administrator approval.", ephemeral: true });
@@ -361,9 +371,11 @@ client.on(Events.InteractionCreate, async interaction => {
         const member = await interaction.guild.members.fetch(userId);
         const name = formatWords(onboard.name);
         const company = formatWords(onboard.company);
+        
         let role = interaction.guild.roles.cache.find(r => isSameCompany(r.name, company)) || await interaction.guild.roles.create({ name: company });
         await member.roles.add(role);
         await member.setNickname(`${name} | ${getAcronym(company)}`);
+        
         let category = interaction.guild.channels.cache.find(c => c.name === company && c.type === ChannelType.GuildCategory);
         if (!category) {
           category = await interaction.guild.channels.create({ name: company, type: ChannelType.GuildCategory, permissionOverwrites: [{ id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }, { id: role.id, allow: [PermissionsBitField.Flags.ViewChannel] }] });
@@ -447,7 +459,7 @@ client.on(Events.MessageCreate, async msg => {
     .setTitle("✉️ Inter Molds System")
     .setDescription(
       "This bot is used for notifications only.\n" +
-      "We do not receive or monitor messages sent here.\n\n" +
+      " We do not receive or monitor messages sent here.\n\n" +
       "If you need assistance, please contact us through our official channels."
     )
     .setFooter({ text: "Official System Notification" })
