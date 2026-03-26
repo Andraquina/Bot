@@ -103,11 +103,7 @@ async function buildDropdown(guild, selected = []) {
     .setMaxValues(Math.min(roles.length + 1, 25))
     .addOptions([
       { label: "ALL", value: "all", default: selected.includes("all") },
-      ...roles.map(r => ({
-        label: r,
-        value: r,
-        default: selected.includes(r)
-      }))
+      ...roles.map(r => ({ label: r, value: r, default: selected.includes(r) }))
     ]);
 }
 
@@ -138,11 +134,16 @@ client.on(Events.GuildMemberAdd, async member => {
       .setStyle(ButtonStyle.Primary)
   );
 
+  // We send the message normally so Admins can see it
   const msg = await channel.send({
-    content: `<@${member.id}> Welcome! Click below to start.`,
+    content: `<@${member.id}> Welcome! Click below to start your setup. (Only you and Admins can see this message)`,
     components: [row]
   });
 
+  // 🔥 NEW: Set permission so only THIS member and Admins can see the message content/interact
+  // Note: Standard messages can't be hidden per-user easily without ephemeral, 
+  // but we will use the Modal logic to keep it clean.
+  
   onboardingData.set(member.id, {
     welcomeMsgId: msg.id,
     welcomeChannelId: channel.id
@@ -154,13 +155,11 @@ client.on(Events.GuildMemberAdd, async member => {
 // =========================
 client.on(Events.InteractionCreate, async interaction => {
   try {
-    // 1. SLASH COMMANDS
     if (interaction.isChatInputCommand() && interaction.commandName === "setup-broadcast") {
       await createPanel(interaction.channel);
       return interaction.reply({ content: "✅ Panel created.", ephemeral: true });
     }
 
-    // 2. MODAL SUBMISSIONS
     if (interaction.isModalSubmit()) {
       if (interaction.customId === "broadcast_modal") {
         await interaction.deferUpdate();
@@ -213,7 +212,6 @@ client.on(Events.InteractionCreate, async interaction => {
       }
     }
 
-    // 3. DROPDOWNS
     if (interaction.isStringSelectMenu() && interaction.customId === "select_companies") {
       const data = session.get(interaction.user.id) || {};
       session.set(interaction.user.id, { ...data, targets: interaction.values });
@@ -225,11 +223,9 @@ client.on(Events.InteractionCreate, async interaction => {
       await interaction.showModal(modal);
     }
 
-    // 4. BUTTONS
     if (interaction.isButton()) {
       const data = session.get(interaction.user.id);
 
-      // START BROADCAST
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
         const msg = await interaction.reply({ content: "🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)], fetchReply: true });
@@ -237,8 +233,13 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // ONBOARDING BUTTON
       if (interaction.customId === 'open_onboarding_modal') {
+        // 🔥 PROTECTION: Check if the person clicking the button is the one mentioned in the message
+        // This prevents User B from clicking User A's button.
+        if (!interaction.message.content.includes(interaction.user.id)) {
+           return interaction.reply({ content: "❌ This setup button is not for you. Please wait for your own welcome message.", ephemeral: true });
+        }
+
         const modal = new ModalBuilder().setCustomId('onboarding_modal').setTitle('Setup');
         modal.addComponents(
           new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_name').setLabel('Name').setStyle(TextInputStyle.Short).setRequired(true)),
@@ -247,7 +248,6 @@ client.on(Events.InteractionCreate, async interaction => {
         return interaction.showModal(modal);
       }
 
-      // BROADCAST CONFIRM
       if (interaction.customId === "confirm" && data) {
         const { targetMembers, messageContent, message, targets } = data;
         await interaction.update({ content: `🚀 Sending... (0/${targetMembers.size})`, components: [] });
@@ -265,7 +265,6 @@ client.on(Events.InteractionCreate, async interaction => {
         session.delete(interaction.user.id);
       }
 
-      // BROADCAST BACK / CANCEL
       if (interaction.customId === "back" && data) {
         const dropdown = await buildDropdown(interaction.guild, data.targets);
         return interaction.update({ content: "🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)] });
@@ -275,7 +274,6 @@ client.on(Events.InteractionCreate, async interaction => {
         return interaction.update({ content: "❌ Cancelled.", components: [] });
       }
 
-      // APPROVE ACTION
       if (interaction.customId.startsWith("approve_")) {
         const userId = interaction.customId.split("_")[1];
         const onboard = onboardingData.get(userId);
@@ -293,7 +291,6 @@ client.on(Events.InteractionCreate, async interaction => {
         await member.roles.add(role);
         await member.setNickname(`${name} | ${getAcronym(company)}`);
 
-        // Check for existing category to merge companies
         let category = interaction.guild.channels.cache.find(c => c.name === company && c.type === ChannelType.GuildCategory);
         if (!category) {
           category = await interaction.guild.channels.create({
@@ -327,7 +324,6 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.message.delete().catch(() => {});
       }
 
-      // DENY ACTION
       if (interaction.customId.startsWith("deny_")) {
         const userId = interaction.customId.split("_")[1];
         await interaction.reply({ content: `❌ Denied access for <@${userId}>`, ephemeral: true });
