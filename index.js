@@ -281,7 +281,7 @@ client.on(Events.InteractionCreate, async interaction => {
         });
 
         // 1. Send brand new Confirmation message
-        await interaction.channel.send({ content: `✅ **Production Created**\n🖊️Created: ${newChan.id}\n🫙Mold: ${roleName}` });
+        await interaction.channel.send({ content: `✅ **Production Created**\n\n🏢Company: ${rolename}\n🎰Mold: ${newChan.name}\n` });
         
         // 2. Delete the setup/preview message
         await message.delete().catch(() => {});
@@ -306,7 +306,7 @@ client.on(Events.InteractionCreate, async interaction => {
           try { await m.send({ embeds: [new EmbedBuilder().setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db).setTitle("📢 Announcement").setDescription(messageContent).setFooter({ text: "Inter Molds, Inc." }).setTimestamp()] }); success++; } catch {}
           if (i % 2 === 0 || i === targetMembers.size) await message.edit({ content: `🚀 Sending... (${i}/${targetMembers.size})` });
         }
-        await interaction.channel.send({ content: `✅ **Broadcast Completed**\n🎯 Targets: ${targets.join(", ")}\n👥 Sent: ${success}\n💬 ${messageContent}` });
+        await interaction.channel.send({ content: `✅ **Broadcast Completed**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Sent: ${success}\n❌ Failed: ${failed}\n\n💬 ${messageContent}\n` });
         await message.delete().catch(() => {});
         session.delete(interaction.user.id);
       }
