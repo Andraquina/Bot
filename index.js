@@ -213,7 +213,7 @@ client.on(Events.InteractionCreate, async interaction => {
         );
 
         await data.message.edit({
-            content: `🏗️ **Production Preview**\n\n**Company:** ${roleName}\n**Mold Name:** ${moldName}`,
+            content: `🏗️ **Production Preview**\n\n**Company:** ${roleName}\n**Mold Name:** ${moldName}\n`,
             components: [previewRow]
         });
 
@@ -281,7 +281,7 @@ client.on(Events.InteractionCreate, async interaction => {
         });
 
         // 1. Send brand new Confirmation message
-        await interaction.channel.send({ content: `✅ **Production Created**\n\nCreated <#${newChan.id}> under **${roleName}**.` });
+        await interaction.channel.send({ content: `✅ **Production Created**\n\nCreated <#${newChan.id}> under **${roleName}**.\n` });
         
         // 2. Delete the setup/preview message
         await message.delete().catch(() => {});
@@ -291,25 +291,35 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      if (interaction.customId === 'open_onboarding_modal') {
-        const modal = new ModalBuilder().setCustomId('onboarding_modal').setTitle('Setup');
-        modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_name').setLabel('Name').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('company_name').setLabel('Company').setStyle(TextInputStyle.Short).setRequired(true)));
-        return interaction.showModal(modal);
-      }
-
+      // BROADCAST CONFIRM
+      
       if (interaction.customId === "confirm" && data) {
         const { targetMembers, messageContent, message, targets } = data;
-        await interaction.update({ content: `🚀 Sending...`, components: [] });
-        let i = 0; let success = 0;
-        for (const m of targetMembers.values()) {
+        await interaction.update({
+          content: `🚀 Sending... (0/${targetMembers.size})`,
+          components: []
+        });
+        let i = 0; let success = 0; let failed = 0;
+        for (const member of targetMembers.values()) {
           i++;
-          try { await m.send({ embeds: [new EmbedBuilder().setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db).setTitle("📢 Announcement").setDescription(messageContent).setFooter({ text: "Inter Molds, Inc." }).setTimestamp()] }); success++; } catch {}
-          if (i % 2 === 0 || i === targetMembers.size) await message.edit({ content: `🚀 Sending... (${i}/${targetMembers.size})` });
+          try {
+            await member.send({
+              embeds: [new EmbedBuilder().setColor(targets.includes("all") ? 0x2ecc71 : 0x3498db).setTitle(targets.includes("all") ? "📢 Announcement" : "📢 Company Update").setDescription(messageContent).setFooter({ text: "Inter Molds, Inc." }).setTimestamp()]
+            });
+            success++;
+          } catch { failed++; }
+          if (i % 2 === 0 || i === targetMembers.size) {
+            await message.edit({ content: `🚀 Sending... (${i}/${targetMembers.size})` });
+          }
         }
-        await interaction.channel.send({ content: `✅ **Broadcast Completed**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Sent: ${success}\n❌ Failed: ${failed}\n\n💬 ${messageContent}` });
-        await message.delete().catch(() => {});
+        await message.edit({
+          content: `✅ **Broadcast Completed**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Sent: ${success}\n❌ Failed: ${failed}\n\n💬 ${messageContent}`
+        });
         session.delete(interaction.user.id);
       }
+
+      
+      // APPROVE ACTION
 
       if (interaction.customId === "back" && data) {
         const dropdown = await buildDropdown(interaction.guild, data.targets);
