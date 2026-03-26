@@ -312,7 +312,7 @@ client.on(Events.InteractionCreate, async interaction => {
             await message.edit({ content: `🚀 Sending... (${i}/${targetMembers.size})` });
           }
         }
-        await message.edit({
+        await interaction.channel.send({
           content: `✅ **Broadcast Completed**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Sent: ${success}\n❌ Failed: ${failed}\n\n💬 ${messageContent}`
         });
         session.delete(interaction.user.id);
