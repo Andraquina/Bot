@@ -299,11 +299,30 @@ client.on(Events.InteractionCreate, async interaction => {
   } catch (err) { console.error("Interaction Error:", err); }
 });
 
+// =========================
+// DM REDIRECTION (Photo Style)
+// =========================
 client.on(Events.MessageCreate, async msg => {
   if (msg.guild || msg.author.bot) return;
   if (repliedUsers.has(msg.author.id)) return;
   repliedUsers.add(msg.author.id);
-  await msg.reply("📩 **Inter Molds System**\nThis bot is for notifications only.");
+
+  const dmEmbed = new EmbedBuilder()
+    .setColor(0x2F3136) // Dark theme background matching photo
+    .setAuthor({ 
+      name: 'IMI | Inter Molds System', 
+      iconURL: client.user.displayAvatarURL() 
+    })
+    .setTitle("✉️ Inter Molds System")
+    .setDescription(
+      "This bot is used for notifications only.\n" +
+      "We do not receive or monitor messages sent here.\n\n" +
+      "If you need assistance, please contact us through our official channels."
+    )
+    .setFooter({ text: "Official System Notification" })
+    .setTimestamp();
+
+  await msg.reply({ embeds: [dmEmbed] });
 });
 
 client.login(process.env.TOKEN);
