@@ -240,10 +240,13 @@ client.on(Events.InteractionCreate, async interaction => {
         const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel('Approve').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`deny_${interaction.user.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger));
         await adminChannel.send({ content: `🚨 New request\n\nUser: <@${interaction.user.id}>\nName: ${name}\nCompany: ${company}`, components: [row] });
         
-        if (currentData.welcomeMsgId) {
-          const welcomeChannel = interaction.guild.channels.cache.get(currentData.welcomeChannelId);
-          if (welcomeChannel) welcomeChannel.messages.fetch(currentData.welcomeMsgId).then(m => m.delete().catch(() => {}));
+        // FIXED timing: Wipe the welcome channel immediately upon submission
+        const welcomeChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("welcome"));
+        if (welcomeChannel) {
+          const messages = await welcomeChannel.messages.fetch({ limit: 100 });
+          await welcomeChannel.bulkDelete(messages).catch(() => {});
         }
+
         return interaction.reply({ content: "✅ Information submitted. Please wait for administrator approval.", ephemeral: true });
       }
     }
@@ -368,13 +371,6 @@ client.on(Events.InteractionCreate, async interaction => {
           await interaction.guild.channels.create({ name: 'general', type: ChannelType.GuildText, parent: category.id, permissionOverwrites: [{ id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }, { id: role.id, allow: basic, deny: [PermissionsBitField.Flags.MentionEveryone, PermissionsBitField.Flags.ManageMessages] }] });
           await interaction.guild.channels.create({ name: 'Voice Call', type: ChannelType.GuildVoice, parent: category.id, permissionOverwrites: [{ id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }, { id: role.id, allow: basic }] });
         }
-        const welcomeChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes("welcome"));
-        if (welcomeChannel) {
-          const newChannel = await welcomeChannel.clone();
-          await welcomeChannel.delete().catch(() => {});
-          await newChannel.setPosition(welcomeChannel.position);
-          await newChannel.permissionOverwrites.create(role.id, { ViewChannel: false });
-        }
         
         // ACCEPTANCE DM
         await member.send(`✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉`).catch(() => {});
@@ -386,7 +382,7 @@ client.on(Events.InteractionCreate, async interaction => {
           .setDescription(
             "**1. Account & Technical Setup**\n" +
             "• Please ensure you login using your **official company email** to avoid future access issues.\n" +
-            "• For the best experience and reliable notifications, we strongly recommend **downloading the Discord app** (Desktop or Mobile) instead of using the browser.\n\n" +
+            "• For the best experience and reliable notifications, we strongly recommend **downloading the Discord app** instead of using the browser.\n\n" +
             "**2. Privacy & Communication**\n" +
             "• All company-specific channels are **strictly private** and destined only for your organization.\n" +
             "• If you have general questions, please use the `general` channel created for your company.\n\n" +
@@ -421,7 +417,7 @@ client.on(Events.InteractionCreate, async interaction => {
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("message").setLabel("Message").setStyle(TextInputStyle.Paragraph).setRequired(true)),
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("delay").setLabel("Delay (seconds)").setStyle(TextInputStyle.Short).setPlaceholder("0").setRequired(false))
           );
-          return interaction.showModal(modal);
+          await interaction.showModal(modal);
         } else {
           const modal = new ModalBuilder().setCustomId("production_modal").setTitle("Mold Details");
           modal.addComponents(
