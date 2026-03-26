@@ -251,7 +251,6 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.isButton()) {
       const data = session.get(interaction.user.id);
       
-      // FIXED ONBOARDING TRIGGER
       if (interaction.customId === 'open_onboarding_modal') {
         const modal = new ModalBuilder().setCustomId('onboarding_modal').setTitle('Setup');
         modal.addComponents(
@@ -377,25 +376,33 @@ client.on(Events.InteractionCreate, async interaction => {
           await newChannel.permissionOverwrites.create(role.id, { ViewChannel: false });
         }
         
+        // ACCEPTANCE DM
+        await member.send(`✅ You've been approved! Welcome to **Inter Molds, Inc.** 🎉`).catch(() => {});
+
+        // RULES DM
         const rules = new EmbedBuilder()
           .setTitle("📜 Inter Molds | Server Guidelines")
           .setColor(0xF1C40F)
           .setDescription(
             "**1. Account & Technical Setup**\n" +
             "• Please ensure you login using your **official company email** to avoid future access issues.\n" +
-            "• For the best experience and reliable notifications, we strongly recommend **downloading the Discord app** instead of using the browser.\n\n" +
+            "• For the best experience and reliable notifications, we strongly recommend **downloading the Discord app** (Desktop or Mobile) instead of using the browser.\n\n" +
             "**2. Privacy & Communication**\n" +
-            "• All company-specific channels are **strictly private**.\n\n" +
+            "• All company-specific channels are **strictly private** and destined only for your organization.\n" +
+            "• If you have general questions, please use the `general` channel created for your company.\n\n" +
             "**3. Mold Tracking & Production**\n" +
-            "• Admins will create a specific channel for every different mold/production.\n\n" +
+            "• Admins will create a specific channel for every different mold/production.\n" +
+            "• Each channel will have an associated link; please keep the conversation in those channels **strictly related** to that specific production for easier access.\n\n" +
             "**4. Team Members**\n" +
-            "• Colleagues must use the **exact same company name** to merge into your category.\n\n" +
-            "**5. Support**\n" +
-            "• **Direct Message (DM) an Admin** for assistance."
+            "• If more people from your company wish to join, they are welcome! Just ensure they use the **exact same company name** during their setup process.\n\n" +
+            "**5. Support & Updates**\n" +
+            "• For specific or private problems, you can **Direct Message (DM) an Admin** by clicking our avatar on the right side and selecting 'Send Message'.\n" +
+            "• Server updates will be notified via this Bot through DM. Please avoid accessing the server during those maintenance periods."
           )
           .setFooter({ text: "Inter Molds, Inc. - Professional Mold Solutions" });
         
         await member.send({ embeds: [rules] }).catch(() => {});
+        
         await interaction.channel.send({ content: `✅ Approved **${name}** from **${company}**` });
         onboardingData.delete(userId);
         await interaction.deleteReply().catch(() => {});
