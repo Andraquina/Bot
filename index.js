@@ -315,9 +315,13 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.channel.send({
           content: `✅ **Broadcast Completed**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Sent: ${success}\n❌ Failed: ${failed}\n\n💬 ${messageContent}`
         });
+        // 2. Delete the setup/preview message
+        await message.delete().catch(() => {});
+        
+        // 3. Clear session
         session.delete(interaction.user.id);
+        return;
       }
-
       
       // APPROVE ACTION
 
