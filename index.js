@@ -249,7 +249,7 @@ client.on(Events.InteractionCreate, async interaction => {
       
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
-        const msg = await interaction.channel.send({ content: "\n🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)], fetchReply: true }\n);
+        const msg = await interaction.channel.send({ content: "\n🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)], fetchReply: true \n});
         session.set(interaction.user.id, { message: msg });
         return;
       }
