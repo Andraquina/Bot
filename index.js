@@ -147,7 +147,7 @@ client.on(Events.GuildMemberAdd, async member => {
   );
 
   const msg = await channel.send({
-    content: `<@${member.id}> Welcome! Click below to start. You have **5 minutes**.`,
+    content: `<@${member.id}> Welcome! Click below to get started. You have **5 minutes** before this session expires.`,
     components: [row]
   });
 
@@ -244,7 +244,7 @@ client.on(Events.InteractionCreate, async interaction => {
           const welcomeChannel = interaction.guild.channels.cache.get(currentData.welcomeChannelId);
           if (welcomeChannel) welcomeChannel.messages.fetch(currentData.welcomeMsgId).then(m => m.delete().catch(() => {}));
         }
-        return interaction.reply({ content: "✅ Info submitted.", ephemeral: true });
+        return interaction.reply({ content: "✅ Information submitted. Please wait for administrator approval.", ephemeral: true });
       }
     }
 
