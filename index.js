@@ -196,7 +196,7 @@ client.on(Events.InteractionCreate, async interaction => {
         let members = await interaction.guild.members.fetch();
         const targetMembers = members.filter(m => !m.user.bot && (targets.includes("all") || m.roles.cache.some(r => targets.some(t => isSameCompany(r.name, t)))));
         const buttons = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId("back").setLabel("✏️ Edit").setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger));
-        await data.message.edit({ content: `📢 **Preview**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Users: ${targetMembers.size}\n\nMessage: ${messageContent}`, components: [buttons] });
+        await data.message.edit({ content: `📢 **Preview**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Users: ${targetMembers.size}\n\nMessage: ${messageContent}`, components: [buttons] }\n);
         session.set(interaction.user.id, { ...data, messageContent, targetMembers });
       }
 
@@ -245,7 +245,7 @@ client.on(Events.InteractionCreate, async interaction => {
       
       if (interaction.customId === "start_broadcast") {
         const dropdown = await buildDropdown(interaction.guild);
-        const msg = await interaction.reply({ content: "🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)], fetchReply: true });
+        const msg = await interaction.channel.send({ content: "\n🎯 Select companies:", components: [new ActionRowBuilder().addComponents(dropdown)], fetchReply: true }\n);
         session.set(interaction.user.id, { message: msg });
         return;
       }
@@ -254,8 +254,8 @@ client.on(Events.InteractionCreate, async interaction => {
         const dropdown = await buildDropdown(interaction.guild, [], "prod_select");
         // Start a NEW Public message for production
         const msg = await interaction.channel.send({ 
-            content: "🏗️ **Production Setup**\nSelect company role:", 
-            components: [new ActionRowBuilder().addComponents(dropdown)] 
+            content: "\n🏗️ **Production Setup**\nSelect company role:", 
+            components: [new ActionRowBuilder().addComponents(dropdown)]\n 
         });
         session.set(interaction.user.id, { message: msg });
         return interaction.deferUpdate(); // Acknowledge without ephemeral reply
@@ -281,7 +281,7 @@ client.on(Events.InteractionCreate, async interaction => {
         });
 
         // 1. Send brand new Confirmation message
-        await interaction.channel.send({ content: `✅ **Production Created**\n\nCreated <#${newChan.id}> under **${roleName}**.\n` });
+        await interaction.channel.send({ content: `✅ **Production Created**\n\nCreated <#${newChan.id}> under **${roleName}**.\n` }\n);
         
         // 2. Delete the setup/preview message
         await message.delete().catch(() => {});
