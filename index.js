@@ -44,7 +44,7 @@ client.once(Events.ClientReady, async () => {
 
   const commands = [
     new SlashCommandBuilder().setName('setup-broadcast').setDescription('Create broadcast panel'),
-    new SlashCommandBuilder().setName('create-production').setDescription('Create the permanent Production Channel button')
+    new SlashCommandBuilder().setName('create-production').setDescription('Create production panel')
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -116,7 +116,7 @@ client.on(Events.InteractionCreate, async interaction => {
       if (interaction.commandName === "setup-broadcast") {
         const btn = new ButtonBuilder().setCustomId("start_broadcast").setLabel("📢 Start Broadcast").setStyle(ButtonStyle.Primary);
         await interaction.channel.send({ content: "📢 **Broadcast Panel**", components: [new ActionRowBuilder().addComponents(btn)] });
-        return interaction.reply({ content: "✅ Panel created.", ephemeral: true });
+        return interaction.reply({ content: "✅ Broadcast Panel created.", ephemeral: true });
       }
       if (interaction.commandName === "create-production") {
         const btn = new ButtonBuilder().setCustomId("start_production").setLabel("🏗️ Create Production").setStyle(ButtonStyle.Success);
@@ -131,26 +131,30 @@ client.on(Events.InteractionCreate, async interaction => {
       if (interaction.customId === "broadcast_modal") {
         await interaction.deferUpdate();
         if (!data) return;
-        const messageContent = interaction.fields.getTextInputValue("message");
+        const text = interaction.fields.getTextInputValue("message");
         const members = await interaction.guild.members.fetch();
-        const targetMembers = members.filter(m => !m.user.bot && (data.targets.includes("all") || m.roles.cache.some(r => data.targets.some(t => isSameCompany(r.name, t)))));
+        const targets = data.targets;
+        const targetMembers = members.filter(m => !m.user.bot && (targets.includes("all") || m.roles.cache.some(r => targets.some(t => isSameCompany(r.name, t)))));
+        
         const btns = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId("confirm_bc").setLabel("Confirm").setStyle(ButtonStyle.Success),
           new ButtonBuilder().setCustomId("cancel_flow").setLabel("Cancel").setStyle(ButtonStyle.Danger)
         );
-        await data.message.edit({ content: `📢 **Broadcast Preview**\nTargets: ${data.targets.join(", ")}\nMessage: ${messageContent}`, components: [btns] });
-        session.set(interaction.user.id, { ...data, messageContent, targetMembers });
+        await data.message.edit({ content: `📢 **Broadcast Preview**\nTargets: ${targets.join(", ")}\nMessage: ${text}`, components: [btns] });
+        session.set(interaction.user.id, { ...data, messageContent: text, targetMembers });
       }
 
       if (interaction.customId === "production_modal") {
         await interaction.deferUpdate();
         if (!data) return;
         const moldName = interaction.fields.getTextInputValue("mold_name");
+        const roleName = data.targets[0];
+        
         const btns = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId("confirm_prod").setLabel("Confirm Creation").setStyle(ButtonStyle.Success),
           new ButtonBuilder().setCustomId("cancel_flow").setLabel("Cancel").setStyle(ButtonStyle.Danger)
         );
-        await data.message.edit({ content: `🏗️ **Production Preview**\nCompany: **${data.targets[0]}**\nMold Name: **${moldName}**`, components: [btns] });
+        await data.message.edit({ content: `🏗️ **Production Preview**\nCompany: **${roleName}**\nMold Name: **${moldName}**`, components: [btns] });
         session.set(interaction.user.id, { ...data, moldName });
       }
 
@@ -177,14 +181,14 @@ client.on(Events.InteractionCreate, async interaction => {
         const dropdown = await buildDropdown(interaction.guild, [], "select_companies");
         const msg = await interaction.channel.send({ content: "🎯 **Broadcast Setup**\nSelect target companies:", components: [new ActionRowBuilder().addComponents(dropdown)] });
         session.set(interaction.user.id, { message: msg });
-        return interaction.reply({ content: "Broadcast Setup started below.", ephemeral: true });
+        return interaction.reply({ content: "Setup started below.", ephemeral: true });
       }
 
       if (interaction.customId === "start_production") {
         const dropdown = await buildDropdown(interaction.guild, [], "prod_select");
         const msg = await interaction.channel.send({ content: "🏗️ **Production Setup**\nSelect company role:", components: [new ActionRowBuilder().addComponents(dropdown)] });
         session.set(interaction.user.id, { message: msg });
-        return interaction.reply({ content: "Production Setup started below.", ephemeral: true });
+        return interaction.reply({ content: "Setup started below.", ephemeral: true });
       }
 
       if (interaction.customId === "confirm_bc" && data) {
@@ -279,6 +283,7 @@ client.on(Events.InteractionCreate, async interaction => {
   } catch (err) { console.error("Error:", err); }
 });
 
+// DM Embed
 client.on(Events.MessageCreate, async msg => {
   if (msg.guild || msg.author.bot) return;
   if (repliedUsers.has(msg.author.id)) return;
