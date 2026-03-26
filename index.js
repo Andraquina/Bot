@@ -196,7 +196,11 @@ client.on(Events.InteractionCreate, async interaction => {
         let members = await interaction.guild.members.fetch();
         const targetMembers = members.filter(m => !m.user.bot && (targets.includes("all") || m.roles.cache.some(r => targets.some(t => isSameCompany(r.name, t)))));
         const buttons = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("confirm").setLabel("Confirm").setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId("back").setLabel("✏️ Edit").setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId("cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger));
-        await data.message.edit({ content: `📢 **Preview**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Users: ${targetMembers.size}\n\nMessage: ${messageContent}`, components: [buttons] }\n);
+        // Replace your crashing line with this:
+        await data.message.edit({ 
+          content: `📢 **Broadcast Preview**\n\n🎯 Targets: ${targets.join(", ")}\n👥 Users: ${targetMembers.size}\n\n💬 Message: ${messageContent}`, 
+          components: [buttons] 
+        });
         session.set(interaction.user.id, { ...data, messageContent, targetMembers });
       }
 
