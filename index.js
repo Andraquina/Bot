@@ -217,7 +217,7 @@ client.on(Events.InteractionCreate, async interaction => {
         );
 
         await data.message.edit({
-            content: `🏗️ **Production Preview**\n\n**Company:** ${roleName}\n**Mold Name:** ${moldName}\n`,
+            content: `🏗️ **Production Preview**\n\n**Company:** ${roleName}\n**Mold Name:** ${moldName}`,
             components: [previewRow]
         });
 
@@ -259,7 +259,7 @@ client.on(Events.InteractionCreate, async interaction => {
         // Start a NEW Public message for production
         const msg = await interaction.channel.send({ 
             content: "\n🏗️ **Production Setup**\nSelect company role:", 
-            components: [new ActionRowBuilder().addComponents(dropdown)]\n 
+            components: [new ActionRowBuilder().addComponents(dropdown)]
         });
         session.set(interaction.user.id, { message: msg });
         return interaction.deferUpdate(); // Acknowledge without ephemeral reply
@@ -285,7 +285,7 @@ client.on(Events.InteractionCreate, async interaction => {
         });
 
         // 1. Send brand new Confirmation message
-        await interaction.channel.send({ content: `✅ **Production Created**\n\nCreated <#${newChan.id}> under **${roleName}**.\n` }\n);
+        await interaction.channel.send({ content: `✅ **Production Created**\n\nCreated <#${newChan.id}> under **${roleName}**.\n` });
         
         // 2. Delete the setup/preview message
         await message.delete().catch(() => {});
