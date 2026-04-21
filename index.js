@@ -66,7 +66,7 @@ client.once(Events.ClientReady, async () => {
       .setDescription('Create the permanent Production Channel button')
   ].map(c => c.toJSON());
 
-  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+  const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
   try {
     await rest.put(
@@ -482,4 +482,4 @@ client.on(Events.MessageCreate, async msg => {
   await msg.reply({ embeds: [dmEmbed] });
 });
 
-client.login(process.env.TOKEN);
+client.login(process.env.DISCORD_TOKEN);
