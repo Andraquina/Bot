@@ -10,11 +10,6 @@ app.listen(port, () => {
   console.log(`Bot is listening on port ${port}`);
 });
 
-// --- YOUR EXISTING BOT CODE STARTS BELOW THIS LINE ---
-require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
-// ... continue with the rest of your original code
-
 
 const {
   Client,
