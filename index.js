@@ -1,6 +1,6 @@
 const express = require('express');
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 10000;
 
 app.get('/', (req, res) => {
   res.send('Bot is alive!');
@@ -9,6 +9,11 @@ app.get('/', (req, res) => {
 app.listen(port, () => {
   console.log(`Bot is listening on port ${port}`);
 });
+
+// --- YOUR EXISTING BOT CODE STARTS BELOW THIS LINE ---
+require('dotenv').config();
+const { Client, GatewayIntentBits } = require('discord.js');
+// ... continue with the rest of your original code
 
 
 const {
