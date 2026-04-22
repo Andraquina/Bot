@@ -54,8 +54,6 @@ const guildMemberCache = new Map();
 // =========================
 // READY & SLASH COMMANDS
 // =========================
-client.once(Events.ClientReady, async () => {
-  console.log('🔥 BOT IS ONLINE');
 
   const commands = [
     new SlashCommandBuilder()
@@ -67,6 +65,11 @@ client.once(Events.ClientReady, async () => {
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+
+  
+  client.once(Events.ClientReady, async () => {
+    console.log('🔥 BOT IS ONLINE');
+
 
   try {
     await rest.put(
