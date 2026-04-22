@@ -64,11 +64,11 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 client.once(Events.ClientReady, async (c) => {
   console.log(`🔥 BOT IS ONLINE! Logged in as ${c.user.tag}`);
-  // Set Presence to ensure Discord registers the bot as online
+  // This forces the "Online" status in Discord
   client.user.setPresence({ activities: [{ name: 'System Active' }], status: 'online' });
 });
 
-// Register commands independently to prevent ready-event crashes
+// Register commands independently so they don't block the Ready event
 (async () => {
   try {
     await rest.put(
