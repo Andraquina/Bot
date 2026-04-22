@@ -64,7 +64,12 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 client.once(Events.ClientReady, async (c) => {
   console.log(`🔥 BOT IS ONLINE! Logged in as ${c.user.tag}`);
+  // Set Presence to ensure Discord registers the bot as online
+  client.user.setPresence({ activities: [{ name: 'System Active' }], status: 'online' });
+});
 
+// Register commands independently to prevent ready-event crashes
+(async () => {
   try {
     await rest.put(
       Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
@@ -74,7 +79,7 @@ client.once(Events.ClientReady, async (c) => {
   } catch (error) {
     console.error("❌ Command registration failed:", error);
   }
-});
+})();
 
 // =========================
 // 🧠 HELPERS
