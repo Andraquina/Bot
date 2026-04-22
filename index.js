@@ -482,4 +482,5 @@ client.on(Events.MessageCreate, async msg => {
   await msg.reply({ embeds: [dmEmbed] });
 });
 
-client.login(process.env.DISCORD_TOKEN);
+console.log("DEBUG: The token I am using is:", process.env.TOKEN);
+client.login(process.env.TOKEN);
