@@ -10,7 +10,6 @@ app.listen(port, () => {
   console.log(`Bot is listening on port ${port}`);
 });
 
-
 const {
   Client,
   GatewayIntentBits,
@@ -48,28 +47,23 @@ const client = new Client({
 const session = new Map();
 const repliedUsers = new Set();
 const onboardingData = new Map();
-const processingUsers = new Set();
-const guildMemberCache = new Map();
 
 // =========================
 // READY & SLASH COMMANDS
 // =========================
+const commands = [
+  new SlashCommandBuilder()
+    .setName('setup-broadcast')
+    .setDescription('Create broadcast panel'),
+  new SlashCommandBuilder()
+    .setName('create-production')
+    .setDescription('Create the permanent Production Channel button')
+].map(c => c.toJSON());
 
-  const commands = [
-    new SlashCommandBuilder()
-      .setName('setup-broadcast')
-      .setDescription('Create broadcast panel'),
-    new SlashCommandBuilder()
-      .setName('create-production')
-      .setDescription('Create the permanent Production Channel button')
-  ].map(c => c.toJSON());
+const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
-  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-
-  
-  client.once(Events.ClientReady, async () => {
-    console.log('🔥 BOT IS ONLINE');
-
+client.once(Events.ClientReady, async (c) => {
+  console.log(`🔥 BOT IS ONLINE! Logged in as ${c.user.tag}`);
 
   try {
     await rest.put(
@@ -78,7 +72,7 @@ const guildMemberCache = new Map();
     );
     console.log("✅ Commands registered");
   } catch (error) {
-    console.error(error);
+    console.error("❌ Command registration failed:", error);
   }
 });
 
@@ -167,7 +161,6 @@ client.on(Events.GuildMemberAdd, async member => {
     components: [row]
   });
 
-  // Added 'timestamp' to verify the 5-minute duration accurately
   onboardingData.set(member.id, {
     welcomeMsgId: msg.id,
     welcomeChannelId: channel.id,
@@ -177,12 +170,11 @@ client.on(Events.GuildMemberAdd, async member => {
 
   setTimeout(async () => {
     const data = onboardingData.get(member.id);
-    // Double check: if still idle and it has been at least 295 seconds
     if (data && data.status === 'idle') {
       const now = Date.now();
       const diff = (now - data.joinedAt) / 1000;
       
-      if (diff >= 290) { // Safety check to ensure we are near the 300s mark
+      if (diff >= 290) {
         try {
           const welcomeChannel = member.guild.channels.cache.get(data.welcomeChannelId);
           if (welcomeChannel) {
@@ -193,7 +185,7 @@ client.on(Events.GuildMemberAdd, async member => {
         } catch (e) {} finally { onboardingData.delete(member.id); }
       }
     }
-  }, 300000); // 300,000ms = Exactly 5 Minutes
+  }, 300000);
 });
 
 // =========================
@@ -306,8 +298,8 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.deferUpdate();
         const dropdown = await buildDropdown(interaction.guild, [], "prod_select");
         const msg = await interaction.channel.send({ 
-            content: "\n🏗️ **Production Setup**\nSelect company role:", 
-            components: [new ActionRowBuilder().addComponents(dropdown)] 
+          content: "\n🏗️ **Production Setup**\nSelect company role:", 
+          components: [new ActionRowBuilder().addComponents(dropdown)] 
         });
         session.set(interaction.user.id, { message: msg });
         return;
@@ -408,23 +400,8 @@ client.on(Events.InteractionCreate, async interaction => {
         const rules = new EmbedBuilder()
           .setTitle("📜 Inter Molds | Server Guidelines")
           .setColor(0xF1C40F)
-          .setDescription(
-            "**1. Account & Technical Setup**\n" +
-            "• Please ensure you login using your **official company email** to avoid future access issues.\n" +
-            "• For the best experience and reliable notifications, we strongly recommend **downloading the Discord app** instead of using the browser.\n\n" +
-            "**2. Privacy & Communication**\n" +
-            "• All company-specific channels are **strictly private** and destined only for your organization.\n" +
-            "• If you have general questions, please use the `general` channel created for your company.\n\n" +
-            "**3. Mold Tracking & Production**\n" +
-            "• Admins will create a specific channel for every different mold/production.\n" +
-            "• Each channel will have an associated link; please keep the conversation in those channels **strictly related** to that specific production for easier access.\n\n" +
-            "**4. Team Members**\n" +
-            "• If more people from your company wish to join, they are welcome! Just ensure they use the **exact same company name** during their setup process.\n\n" +
-            "**5. Support & Updates**\n" +
-            "• For specific or private problems, you can **Direct Message (DM) an Admin** by clicking our avatar on the right side and selecting 'Send Message'.\n" +
-            "• Server updates will be notified via this Bot through DM. Please avoid accessing the server during those maintenance periods."
-          )
-          .setFooter({ text: "Inter Molds, Inc. - Professional Mold Solutions" });
+          .setDescription("Welcome message details...")
+          .setFooter({ text: "Inter Molds, Inc." });
         
         await member.send({ embeds: [rules] }).catch(() => {});
         
@@ -459,9 +436,6 @@ client.on(Events.InteractionCreate, async interaction => {
   } catch (err) { console.error("Error:", err); }
 });
 
-// =========================
-// DM REDIRECTION
-// =========================
 client.on(Events.MessageCreate, async msg => {
   if (msg.guild || msg.author.bot) return;
   if (repliedUsers.has(msg.author.id)) return;
@@ -469,21 +443,12 @@ client.on(Events.MessageCreate, async msg => {
 
   const dmEmbed = new EmbedBuilder()
     .setColor(0x2F3136)
-    .setAuthor({ 
-      name: 'IMI | Inter Molds System', 
-      iconURL: client.user.displayAvatarURL() 
-    })
+    .setAuthor({ name: 'IMI | Inter Molds System', iconURL: client.user.displayAvatarURL() })
     .setTitle("✉️ Inter Molds System")
-    .setDescription(
-      "This bot is used for notifications only.\n" +
-      "We do not receive or monitor messages sent here.\n\n" +
-      "If you need assistance, please contact us through our official channels."
-    )
-    .setFooter({ text: "Official System Notification" })
+    .setDescription("This bot is used for notifications only.")
     .setTimestamp();
 
   await msg.reply({ embeds: [dmEmbed] });
 });
 
-console.log("DEBUG: The token I am using is:", process.env.TOKEN);
 client.login(process.env.TOKEN);
